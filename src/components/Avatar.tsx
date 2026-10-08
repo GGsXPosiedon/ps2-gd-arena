@@ -15,18 +15,19 @@ export function Avatar({
 }: {
   speaker: SpeakerId;
   studentName?: string;
-  size?: number;
+  size?: number | "fill"; // "fill": take the parent's size (room tiles scale with their container)
   speaking?: boolean;
 }) {
+  const box = size === "fill" ? { width: "100%", height: "100%" } : { width: size, height: size };
   if (speaker === "mod") {
     // Neutral outlined avatar with a stopwatch glyph (the moderator keeps time), distinct from persona initials.
     return (
       <span
         className="inline-grid shrink-0 place-items-center rounded-full border border-line-2 bg-surface-3 text-fg-2"
-        style={{ width: size, height: size, boxShadow: speaking ? "0 0 0 2px var(--color-canvas), 0 0 0 4px var(--color-ok)" : undefined }}
+        style={{ ...box, boxShadow: speaking ? "0 0 0 2px var(--color-canvas), 0 0 0 4px var(--color-ok)" : undefined }}
         aria-hidden
       >
-        <svg width={size * 0.5} height={size * 0.5} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <svg width="50%" height="50%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <circle cx="12" cy="14" r="7" />
           <path d="M12 14V10.5M10 2h4M12 2v5" />
         </svg>
@@ -39,15 +40,14 @@ export function Avatar({
       <span
         className="inline-block shrink-0 overflow-hidden rounded-full select-none"
         style={{
-          width: size,
-          height: size,
+          ...box,
           background: speakerColor(speaker),
           boxShadow: speaking ? "0 0 0 2px var(--color-canvas), 0 0 0 4px var(--color-ok)" : undefined,
         }}
         aria-hidden
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- tiny static SVG, no optimisation needed */}
-        <img src={avatarSrc(speaker)} alt="" width={size} height={size} draggable={false} className="block size-full" />
+        <img src={avatarSrc(speaker)} alt="" width={size === "fill" ? 96 : size} height={size === "fill" ? 96 : size} draggable={false} className="block size-full" />
       </span>
     );
   }
@@ -57,9 +57,14 @@ export function Avatar({
     <span
       className="inline-grid shrink-0 place-items-center rounded-full bg-fg font-medium text-canvas select-none"
       style={{
-        width: size,
-        height: size,
-        fontSize: Math.max(10, size * (initials.length > 1 ? 0.3 : 0.42)),
+        ...box,
+        // In "fill" mode the nearest @container (the tile) sets the scale.
+        fontSize:
+          size === "fill"
+            ? initials.length > 1
+              ? "clamp(12px, 7cqi, 26px)"
+              : "clamp(16px, 10cqi, 40px)"
+            : Math.max(10, size * (initials.length > 1 ? 0.3 : 0.42)),
         boxShadow: speaking ? "0 0 0 2px var(--color-canvas), 0 0 0 4px var(--color-ok)" : undefined,
       }}
       aria-hidden

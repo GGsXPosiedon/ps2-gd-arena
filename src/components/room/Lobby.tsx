@@ -34,9 +34,9 @@ export function Lobby({
       : "The moderator opens the floor. Speak in the pauses, or just start talking to cut in.";
 
   return (
-    <div className="w-full max-w-lg text-center">
+    <div className="w-full max-w-xl text-center">
       <p className="text-xs text-fg-3">{meta}</p>
-      <h1 className="mt-2 text-2xl leading-snug font-semibold tracking-tight text-balance text-fg sm:text-[28px]">{config.topic}</h1>
+      <h1 className="font-display mt-2 text-3xl leading-tight text-balance text-fg sm:text-[40px]">{config.topic}</h1>
       {config.focus && (
         <p className="mx-auto mt-3 w-fit rounded-full border border-line px-3 py-1 text-[13px] text-fg-2">
           <span className="text-fg">Focus:</span> {config.focus}
@@ -46,7 +46,7 @@ export function Lobby({
       <TableFigure
         personas={config.personas}
         studentName={config.studentName}
-        className="animate-rise mx-auto mt-6 w-full max-w-md"
+        className="animate-rise mx-auto mt-6 w-full max-w-lg"
       />
 
       <Button

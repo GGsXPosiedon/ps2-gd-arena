@@ -300,7 +300,7 @@ export default function ReportView({ id }: { id: string }) {
       </SiteHeader>
 
       {/* ---------- section nav ---------- */}
-      <nav aria-label="Report sections" className="sticky top-14 z-20 border-b border-line bg-canvas/85 backdrop-blur">
+      <nav aria-label="Report sections" className="sticky top-16 z-20 border-b border-line bg-canvas/85 backdrop-blur">
         <div className="mx-auto flex h-11 max-w-6xl items-center gap-1 overflow-x-auto px-4 sm:px-6">
           {SECTIONS.filter((x) => spoke || x.id !== "overview").map((s) => (
             <a

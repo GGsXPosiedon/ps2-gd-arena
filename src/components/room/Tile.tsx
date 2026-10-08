@@ -40,8 +40,10 @@ export function Tile({
         speaking ? "border-transparent ring-2 ring-ok" : highlight ? "border-fg" : cutOff ? "border-danger/50" : "border-line"
       }`}
     >
-      <div className="absolute inset-0 grid place-items-center pb-6">
-        <Avatar speaker={id} studentName={studentName} size={52} />
+      <div className="absolute inset-0 grid place-items-center pb-7">
+        <div className="aspect-square w-[clamp(56px,30cqi,112px)]">
+          <Avatar speaker={id} studentName={studentName} size="fill" />
+        </div>
       </div>
 
       <div className="absolute top-2 right-2 flex flex-wrap justify-end gap-1">

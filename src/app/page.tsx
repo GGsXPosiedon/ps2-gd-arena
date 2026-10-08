@@ -53,13 +53,13 @@ const icon = (d: string) => (
   </svg>
 );
 
-/** What students use GD Arena for (shown on the homepage's visual half). */
+/** The placement-GD skills GD Arena trains (shown on the homepage's visual half). */
 const USE_CASES: { title: string; detail: string; icon: ReactNode }[] = [
-  { title: "Campus placements", detail: "The GD round, practised before the real one.", icon: icon("M4 8h16v11H4zM9 8V5h6v3M4 13h16") },
-  { title: "MBA admissions", detail: "CAT and XAT GD-PI practice, any topic.", icon: icon("M2 9l10-5 10 5-10 5zM6 11v5c3 2 9 2 12 0v-5") },
-  { title: "Handle a dominator", detail: "Hold the floor when someone cuts you off.", icon: icon("M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z") },
-  { title: "Open and close strong", detail: "Start the discussion, then summarise at the end.", icon: icon("M5 21V4M5 4h11l-2 4 2 4H5") },
-  { title: "Hinglish rooms", detail: "Practise the way many GDs actually sound.", icon: icon("M4 5h10v7H8l-4 3zM14 9h6v7l-3-2h-5v-2") },
+  { title: "Clear the GD round", detail: "The round that decides who gets interviewed.", icon: icon("M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9") },
+  { title: "Speak first", detail: "Open the discussion in the first minute.", icon: icon("M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3") },
+  { title: "Hold your ground", detail: "Keep your point when someone cuts you off.", icon: icon("M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z") },
+  { title: "Build, don't repeat", detail: "Name a peer and extend their point.", icon: icon("M12 3l9 5-9 5-9-5zM3 13l9 5 9-5") },
+  { title: "Close strong", detail: "End with the summary panels remember.", icon: icon("M5 21V4M5 4h11l-2 4 2 4H5") },
 ];
 
 function topicError(raw: string): string | null {
@@ -252,14 +252,14 @@ export default function SetupPage() {
 
       {step === "topic" ? (
         // ================= step 1: topic (split: visual left, action right) =================
-        <main id="main" className="grid min-h-[calc(100dvh-3.5rem-1px)] lg:grid-cols-2">
+        <main id="main" className="grid min-h-[calc(100dvh-4rem-1px)] lg:grid-cols-2">
           {/* RIGHT (action): first in the DOM so phones see the input first */}
           <section aria-labelledby="topic-question" className="flex min-w-0 flex-col justify-center px-4 py-10 sm:px-8 lg:order-2 lg:px-12 xl:px-16">
             <div className="mx-auto w-full max-w-xl">
               <p className="animate-rise font-mono text-xs tracking-wide text-fg-3 uppercase">Group discussion practice</p>
               <h1
                 id="topic-question"
-                className="animate-rise mt-3 text-3xl font-semibold tracking-tight text-balance sm:text-4xl"
+                className="font-display animate-rise mt-3 text-4xl leading-[1.05] text-balance sm:text-5xl"
                 style={{ animationDelay: "40ms" }}
               >
                 What should the group discuss?
@@ -463,7 +463,7 @@ export default function SetupPage() {
               />
               {/* soft backdrop keeps the text legible over the ASCII field */}
               <div className="animate-rise mx-auto mt-2 w-fit rounded-xl bg-surface/80 px-4 py-2 backdrop-blur-sm" style={{ animationDelay: "80ms" }}>
-                <p className="text-center text-xl font-semibold tracking-tight text-balance">Practise the group discussion before the real one.</p>
+                <p className="font-display text-center text-3xl leading-tight text-balance">Practise the placement GD round before the real one.</p>
                 <p className="mt-1.5 text-center text-[13px] text-fg-2 text-pretty">
                   AI panelists who interrupt, argue and drift off-topic. Feedback tied to what you actually said.
                 </p>
@@ -490,7 +490,7 @@ export default function SetupPage() {
         // No transform animation on <main> or the settings panel: it would trap the fixed mobile button.
         <main
           id="main"
-          className="mx-auto grid max-w-5xl items-center gap-8 px-4 pt-6 pb-36 sm:px-6 lg:min-h-[calc(100dvh-3.5rem-1px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-12 lg:py-6"
+          className="mx-auto grid max-w-5xl items-center gap-8 px-4 pt-6 pb-36 sm:px-6 lg:min-h-[calc(100dvh-4rem-1px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-12 lg:py-6"
         >
           {/* left: topic, table, panel */}
           <div className="min-w-0">
