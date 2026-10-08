@@ -242,7 +242,7 @@ export default function SetupPage() {
 
   return (
     <div className="min-h-screen">
-      <SiteHeader wide={step === "topic"}>
+      <SiteHeader wide>
         {health?.provider === "mock" && (
           <span title="No AI key is configured, so the AI participants use scripted lines.">
             <Badge tone="warn">Offline Demo Mode</Badge>
@@ -486,227 +486,247 @@ export default function SetupPage() {
           </aside>
         </main>
       ) : (
-        // ================= step 2: panel + settings, one screen =================
-        // No transform animation on <main> or the settings panel: it would trap the fixed mobile button.
-        <main
-          id="main"
-          className="mx-auto grid max-w-6xl items-center gap-8 px-4 pt-6 pb-36 sm:px-6 lg:min-h-[calc(100dvh-4rem-1px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-12 lg:py-6"
-        >
-          {/* left: topic, table, panel */}
-          <div className="min-w-0">
-            <section aria-labelledby="topic-heading" className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <h1 id="topic-heading" className="text-[13px] text-fg-3">
-                  Topic
-                </h1>
-                <p
-                  className="mt-1 line-clamp-2 text-lg font-medium tracking-tight text-balance sm:text-xl"
-                  style={{ viewTransitionName: "topic" }}
-                  title={config.topic}
-                >
-                  {config.topic}
+        // ================= step 2: room settings (split like step 1: visual left, action right) =================
+        // No transform animation on <main>, the right column or anything wrapping the fixed mobile button.
+        <main id="main" className="grid min-h-[calc(100dvh-4rem-1px)] pb-40 lg:grid-cols-2 lg:pb-0">
+          {/* RIGHT (action): first in the DOM so phones see the controls first */}
+          <section
+            aria-labelledby="settings-heading"
+            className="flex min-w-0 flex-col justify-center px-4 py-8 sm:px-8 lg:order-2 lg:px-12 lg:py-6 xl:px-16"
+          >
+            <div className="mx-auto w-full max-w-xl">
+              <p className="animate-rise font-mono text-xs tracking-wide text-fg-3 uppercase">Room settings</p>
+              <h1
+                id="settings-heading"
+                className="font-display animate-rise mt-3 text-4xl leading-[1.05] text-balance sm:text-5xl"
+                style={{ animationDelay: "40ms" }}
+              >
+                Set up your discussion.
+              </h1>
+
+              <div
+                className="animate-rise mt-6 rounded-2xl border border-line-2 bg-canvas px-5 py-1.5 shadow-[0_1px_0_var(--color-line)] [@media(max-height:820px)]:mt-4"
+                style={{ animationDelay: "80ms" }}
+              >
+                <div className="divide-y divide-line">
+                  <div className="flex items-center justify-between gap-4 py-2.5">
+                    <label htmlFor="student-name" className="shrink-0 text-[13px] whitespace-nowrap text-fg-2">
+                      Your name
+                    </label>
+                    <Input
+                      id="student-name"
+                      name="name"
+                      autoComplete="given-name"
+                      spellCheck={false}
+                      data-testid="name-input"
+                      value={config.studentName}
+                      onChange={(e) => update({ studentName: e.target.value.slice(0, 30) })}
+                      maxLength={30}
+                      placeholder="Optional…"
+                      className="h-8 w-full max-w-52"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 py-2.5">
+                    <div className="min-w-0">
+                      <div className="text-[13px] text-fg-2">Language</div>
+                      {config.language === "hinglish" && <p className="text-xs text-fg-3">Feedback stays in English.</p>}
+                    </div>
+                    <Segmented
+                      label="Language"
+                      options={LANGUAGES}
+                      value={config.language}
+                      onChange={(language) => update({ language })}
+                      render={(l) => (l === "english" ? "English" : "Hinglish")}
+                      testId={(l) => `language-${l}`}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 py-2.5">
+                    <div className="text-[13px] text-fg-2">Length</div>
+                    <Segmented
+                      label="Discussion length"
+                      options={DURATIONS}
+                      value={durationValue}
+                      onChange={(durationMin) => update({ durationMin })}
+                      render={(d) => `${d}m`}
+                      testId={(d) => `duration-${d}`}
+                    />
+                  </div>
+
+                  <MicTest
+                    mode={inputChoice}
+                    onModeChange={setInputChoice}
+                    speakerMode={!!config.speakerMode}
+                    onSpeakerModeChange={(speakerMode) => update({ speakerMode })}
+                    language={config.language}
+                  />
+
+                  <div className="py-1.5">
+                    <button
+                      type="button"
+                      data-testid="customize-settings"
+                      aria-expanded={customize}
+                      aria-controls="more-settings"
+                      onClick={() => setCustomize((v) => !v)}
+                      className={`flex w-full items-center justify-between rounded-md py-1.5 text-[13px] text-fg-3 transition-colors hover:text-fg ${focusRing}`}
+                    >
+                      {customize ? "Fewer settings" : "More settings"}
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        aria-hidden="true"
+                        className={`transition-transform ${customize ? "rotate-180" : ""}`}
+                      >
+                        <path d="M3 4.5 6 7.5l3-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                    {customize && (
+                      <div id="more-settings" className="divide-y divide-line">
+                        <div className="flex items-center justify-between gap-4 py-2.5">
+                          <label htmlFor="patience" className="text-[13px] text-fg-2">
+                            Pause before AIs speak
+                          </label>
+                          <span className="flex items-center gap-3">
+                            <input
+                              id="patience"
+                              type="range"
+                              min={600}
+                              max={2500}
+                              step={100}
+                              value={config.patienceMs}
+                              onChange={(e) => update({ patienceMs: Number(e.target.value) })}
+                              data-testid="patience-slider"
+                              className={`h-5 w-28 cursor-pointer accent-[var(--color-fg)] ${focusRing}`}
+                            />
+                            <span className="w-9 text-right text-[13px] text-fg tabular-nums">{(config.patienceMs / 1000).toFixed(1)} s</span>
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4 py-2.5">
+                          <div className="text-[13px] text-fg-2">Live captions</div>
+                          <Switch checked={config.captions} onChange={(captions) => update({ captions })} label="Live captions" testId="captions-toggle" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <p className="mt-4 text-[13px] text-fg-3 text-pretty">
+                The moderator opens the floor.{" "}
+                {inputChoice === "keyboard"
+                  ? "Type a point and press Enter whenever you want to speak."
+                  : config.speakerMode
+                    ? "Speak in the pauses; press Space to cut in while an AI is talking."
+                    : "Speak in the pauses, or just start talking to cut in."}{" "}
+                You close with a short summary, then get your report.
+              </p>
+              <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-canvas/90 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:static lg:mt-4 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
+                <Button variant="primary" size="lg" data-testid="enter-room" onClick={enter} aria-disabled={starting} className="w-full">
+                  {starting ? "Starting…" : "Start Discussion"}
+                  {!starting && <ArrowRight />}
+                </Button>
+                <p className="mt-2 text-center text-xs text-fg-3">
+                  A {config.durationMin}-minute discussion. Everyone at the table except you is an AI.
                 </p>
               </div>
-              <Button variant="secondary" size="sm" data-testid="topic-change" onClick={back} className="mt-4 shrink-0">
-                Change
-              </Button>
-            </section>
-
-            <TableFigure
-              personas={config.personas}
-              studentName={config.studentName}
-              className="animate-rise mx-auto mt-1 w-full max-w-[15rem] lg:max-w-[16.5rem]"
-            />
-
-            <section aria-labelledby="panel-heading" className="animate-rise mt-2" style={{ animationDelay: "80ms" }}>
-              <div className="flex items-baseline justify-between gap-4">
-                <h2 id="panel-heading" className="text-sm font-medium">
-                  Panel
-                </h2>
-                <span className="text-[13px] text-fg-3 tabular-nums">{panelCount} of 3–5 picked</span>
-              </div>
-              <ul className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {PERSONA_ORDER.map((id) => {
-                  const p = PERSONAS[id];
-                  const on = config.personas.includes(id);
-                  const locked = (on && panelCount <= MIN_PANEL) || (!on && panelCount >= MAX_PANEL);
-                  return (
-                    <li key={id} className="min-w-0">
-                      <button
-                        type="button"
-                        data-testid={`persona-card-${id}`}
-                        aria-pressed={on}
-                        aria-disabled={locked}
-                        title={locked ? (on ? "At least 3 AI participants: add someone before removing" : "At most 5 AI participants: remove someone first") : undefined}
-                        onClick={() => !locked && togglePersona(id)}
-                        className={`relative flex h-full w-full flex-col gap-1.5 rounded-xl border p-2.5 text-left transition-colors ${focusRing} ${
-                          on ? "border-fg bg-surface-2" : "border-line hover:border-line-2"
-                        } ${locked ? "cursor-not-allowed" : ""}`}
-                      >
-                        <span className={`flex min-w-0 items-center gap-2 pr-5 transition-opacity ${on ? "" : "opacity-60"}`}>
-                          <Avatar speaker={id} size={30} />
-                          <span className="min-w-0">
-                            <span className="flex items-center text-[13px] leading-tight font-medium text-fg">
-                              <span className="truncate">{p.name}</span>
-                              <AiTag />
-                            </span>
-                            <span className="block truncate text-[11px] leading-snug text-fg-3">{p.archetype}</span>
-                          </span>
-                        </span>
-                        <span className={`line-clamp-3 text-[12px] leading-snug text-fg-2 transition-opacity ${on ? "" : "opacity-70"}`}>{p.blurb}</span>
-                        <span
-                          aria-hidden="true"
-                          className={`absolute top-2 right-2 grid size-4 place-items-center rounded-full border transition-colors ${
-                            on ? "border-fg bg-fg text-canvas" : "border-line-2"
-                          }`}
-                        >
-                          {on && (
-                            <svg width="9" height="9" viewBox="0 0 10 10">
-                              <path d="M2 5.2 4.1 7.3 8 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          )}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-              <p className="mt-1.5 text-xs text-fg-3" aria-live="polite">
-                {panelCount <= MIN_PANEL
-                  ? "At least 3 AI participants. Add someone before removing another."
-                  : panelCount >= MAX_PANEL
-                    ? "At most 5 AI participants. Remove someone to add another."
-                    : `${panelCount} AI participants and the moderator. Tap to add or remove.`}
-              </p>
-            </section>
-          </div>
-
-          {/* right: one settings panel */}
-          <section aria-label="Room settings" className="min-w-0 rounded-2xl border border-line bg-surface px-5 py-2">
-            <div className="divide-y divide-line">
-              <div className="flex items-center justify-between gap-4 py-2.5">
-                <label htmlFor="student-name" className="shrink-0 text-[13px] whitespace-nowrap text-fg-2">
-                  Your name
-                </label>
-                <Input
-                  id="student-name"
-                  name="name"
-                  autoComplete="given-name"
-                  spellCheck={false}
-                  data-testid="name-input"
-                  value={config.studentName}
-                  onChange={(e) => update({ studentName: e.target.value.slice(0, 30) })}
-                  maxLength={30}
-                  placeholder="Optional…"
-                  className="h-8 w-full max-w-52"
-                />
-              </div>
-
-              <div className="flex items-center justify-between gap-4 py-2.5">
-                <div className="min-w-0">
-                  <div className="text-[13px] text-fg-2">Language</div>
-                  {config.language === "hinglish" && <p className="text-xs text-fg-3">Feedback stays in English.</p>}
-                </div>
-                <Segmented
-                  label="Language"
-                  options={LANGUAGES}
-                  value={config.language}
-                  onChange={(language) => update({ language })}
-                  render={(l) => (l === "english" ? "English" : "Hinglish")}
-                  testId={(l) => `language-${l}`}
-                />
-              </div>
-
-              <div className="flex items-center justify-between gap-4 py-2.5">
-                <div className="text-[13px] text-fg-2">Length</div>
-                <Segmented
-                  label="Discussion length"
-                  options={DURATIONS}
-                  value={durationValue}
-                  onChange={(durationMin) => update({ durationMin })}
-                  render={(d) => `${d}m`}
-                  testId={(d) => `duration-${d}`}
-                />
-              </div>
-
-              <MicTest
-                mode={inputChoice}
-                onModeChange={setInputChoice}
-                speakerMode={!!config.speakerMode}
-                onSpeakerModeChange={(speakerMode) => update({ speakerMode })}
-                language={config.language}
-              />
-
-              <div className="py-1.5">
-                <button
-                  type="button"
-                  data-testid="customize-settings"
-                  aria-expanded={customize}
-                  aria-controls="more-settings"
-                  onClick={() => setCustomize((v) => !v)}
-                  className={`flex w-full items-center justify-between rounded-md py-1.5 text-[13px] text-fg-3 transition-colors hover:text-fg ${focusRing}`}
-                >
-                  {customize ? "Fewer settings" : "More settings"}
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 12 12"
-                    aria-hidden="true"
-                    className={`transition-transform ${customize ? "rotate-180" : ""}`}
-                  >
-                    <path d="M3 4.5 6 7.5l3-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-                {customize && (
-                  <div id="more-settings" className="divide-y divide-line">
-                    <div className="flex items-center justify-between gap-4 py-2.5">
-                      <label htmlFor="patience" className="text-[13px] text-fg-2">
-                        Pause before AIs speak
-                      </label>
-                      <span className="flex items-center gap-3">
-                        <input
-                          id="patience"
-                          type="range"
-                          min={600}
-                          max={2500}
-                          step={100}
-                          value={config.patienceMs}
-                          onChange={(e) => update({ patienceMs: Number(e.target.value) })}
-                          data-testid="patience-slider"
-                          className={`h-5 w-28 cursor-pointer accent-[var(--color-fg)] ${focusRing}`}
-                        />
-                        <span className="w-9 text-right text-[13px] text-fg tabular-nums">{(config.patienceMs / 1000).toFixed(1)} s</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 py-2.5">
-                      <div className="text-[13px] text-fg-2">Live captions</div>
-                      <Switch checked={config.captions} onChange={(captions) => update({ captions })} label="Live captions" testId="captions-toggle" />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <p className="border-t border-line pt-3 text-xs text-fg-3 text-pretty">
-              The moderator opens the floor.{" "}
-              {inputChoice === "keyboard"
-                ? "Type a point and press Enter whenever you want to speak."
-                : config.speakerMode
-                  ? "Speak in the pauses; press Space to cut in while an AI is talking."
-                  : "Speak in the pauses, or just start talking to cut in."}{" "}
-              You close with a short summary, then get your report.
-            </p>
-
-            <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-canvas/90 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:px-0 lg:pt-3 lg:pb-3 lg:backdrop-blur-none">
-              <Button variant="primary" size="lg" data-testid="enter-room" onClick={enter} aria-disabled={starting} className="w-full">
-                {starting ? "Starting…" : "Start Discussion"}
-                {!starting && <ArrowRight />}
-              </Button>
-              <p className="mt-2 text-center text-xs text-fg-3">
-                A {config.durationMin}-minute discussion. Everyone at the table except you is an AI.
-              </p>
             </div>
           </section>
+
+          {/* LEFT (visual): the topic, your live table and the panel picker */}
+          <aside
+            aria-labelledby="topic-heading"
+            className="flex min-w-0 items-center justify-center border-t border-line bg-surface px-4 py-8 sm:px-8 lg:order-1 lg:border-t-0 lg:border-r lg:px-10 lg:py-6"
+          >
+            <div className="w-full max-w-xl">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 id="topic-heading" className="font-mono text-xs tracking-wide text-fg-3 uppercase">
+                    Topic
+                  </h2>
+                  <p
+                    className="font-display mt-2 line-clamp-2 text-3xl leading-tight text-balance"
+                    style={{ viewTransitionName: "topic" }}
+                    title={config.topic}
+                  >
+                    {config.topic}
+                  </p>
+                </div>
+                <Button variant="secondary" size="sm" data-testid="topic-change" onClick={back} className="mt-5 shrink-0">
+                  Change
+                </Button>
+              </div>
+
+              <TableFigure
+                personas={config.personas}
+                studentName={config.studentName}
+                className="animate-rise mx-auto mt-2 w-full max-w-[18rem] [@media(max-height:880px)]:max-w-[14.5rem]"
+              />
+
+              <section aria-labelledby="panel-heading" className="animate-rise mt-1" style={{ animationDelay: "80ms" }}>
+                <div className="flex items-baseline justify-between gap-4">
+                  <h2 id="panel-heading" className="text-sm font-medium">
+                    Panel
+                  </h2>
+                  <span className="text-[13px] text-fg-3 tabular-nums">{panelCount} of 3–5 picked</span>
+                </div>
+                <ul className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {PERSONA_ORDER.map((id) => {
+                    const p = PERSONAS[id];
+                    const on = config.personas.includes(id);
+                    const locked = (on && panelCount <= MIN_PANEL) || (!on && panelCount >= MAX_PANEL);
+                    return (
+                      <li key={id} className="min-w-0">
+                        <button
+                          type="button"
+                          data-testid={`persona-card-${id}`}
+                          aria-pressed={on}
+                          aria-disabled={locked}
+                          title={locked ? (on ? "At least 3 AI participants: add someone before removing" : "At most 5 AI participants: remove someone first") : undefined}
+                          onClick={() => !locked && togglePersona(id)}
+                          className={`relative flex h-full w-full flex-col gap-1.5 rounded-xl border p-2.5 text-left transition-colors ${focusRing} ${
+                            on ? "border-fg bg-surface-2" : "border-line hover:border-line-2"
+                          } ${locked ? "cursor-not-allowed" : ""}`}
+                        >
+                          <span className={`flex min-w-0 items-center gap-2 pr-5 transition-opacity ${on ? "" : "opacity-60"}`}>
+                            <Avatar speaker={id} size={30} />
+                            <span className="min-w-0">
+                              <span className="flex items-center text-[13px] leading-tight font-medium text-fg">
+                                <span className="truncate">{p.name}</span>
+                                <AiTag />
+                              </span>
+                              <span className="block truncate text-[11px] leading-snug text-fg-3">{p.archetype}</span>
+                            </span>
+                          </span>
+                          <span className={`line-clamp-3 text-[12px] leading-snug text-fg-2 transition-opacity ${on ? "" : "opacity-70"}`}>{p.blurb}</span>
+                          <span
+                            aria-hidden="true"
+                            className={`absolute top-2 right-2 grid size-4 place-items-center rounded-full border transition-colors ${
+                              on ? "border-fg bg-fg text-canvas" : "border-line-2"
+                            }`}
+                          >
+                            {on && (
+                              <svg width="9" height="9" viewBox="0 0 10 10">
+                                <path d="M2 5.2 4.1 7.3 8 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="mt-1.5 text-xs text-fg-3" aria-live="polite">
+                  {panelCount <= MIN_PANEL
+                    ? "At least 3 AI participants. Add someone before removing another."
+                    : panelCount >= MAX_PANEL
+                      ? "At most 5 AI participants. Remove someone to add another."
+                      : `${panelCount} AI participants and the moderator. Tap to add or remove.`}
+                </p>
+              </section>
+            </div>
+          </aside>
         </main>
       )}
     </div>
