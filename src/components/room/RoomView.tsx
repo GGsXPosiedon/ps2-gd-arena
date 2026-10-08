@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import type { GDEngine } from "@/lib/engine";
 import type { RoomConfig, SpeakerId } from "@/lib/types";
 import { Lobby } from "./Lobby";
-import { Sidebar } from "./Sidebar";
 import { Stage, yourTurn } from "./Stage";
 import { TranscriptPanel } from "./TranscriptPanel";
 
@@ -28,7 +27,17 @@ function isTypingTarget(t: EventTarget | null) {
   return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
 }
 
-export function RoomView({ engine, config, inputMode }: { engine: GDEngine; config: RoomConfig; inputMode: "voice" | "typed" }) {
+export function RoomView({
+  engine,
+  config,
+  inputMode,
+  autoStarted = false,
+}: {
+  engine: GDEngine;
+  config: RoomConfig;
+  inputMode: "voice" | "typed";
+  autoStarted?: boolean;
+}) {
   const router = useRouter();
   const state = useSyncExternalStore(engine.subscribe, engine.getState, engine.getState);
   const isDesktop = useMediaQuery(DESKTOP);
@@ -138,7 +147,7 @@ export function RoomView({ engine, config, inputMode }: { engine: GDEngine; conf
   );
 
   // Before the discussion starts: a focused pre-join screen, without the room chrome.
-  if (state.status === "idle" || state.status === "starting") {
+  if (!autoStarted && (state.status === "idle" || state.status === "starting")) {
     return (
       <div data-testid="room" className="flex min-h-dvh flex-col bg-canvas">
         <header className="flex h-14 shrink-0 items-center border-b border-line px-4 sm:px-6">
@@ -155,7 +164,6 @@ export function RoomView({ engine, config, inputMode }: { engine: GDEngine; conf
 
   return (
     <div data-testid="room" className="flex h-dvh overflow-hidden bg-canvas">
-      <Sidebar config={config} state={state} onToggleMute={() => engine.toggleMute()} />
       <Stage
         config={config}
         state={state}

@@ -9,12 +9,29 @@ Practise a campus-placement group discussion (GD) out loud with 3–5 AI partici
 ```bash
 bun install          # or npm install
 cp .env.example .env.local   # add a GEMINI_API_KEY (free) or leave empty for offline mock mode
-bun run dev          # http://localhost:3000
+bun run dev          # http://localhost:3000 (production build: bun run build && bun run start)
 ```
 
 Use **Chrome or Edge** (live transcription uses the browser's Web Speech API) and **headphones** (otherwise the AIs can hear themselves and stop mid-sentence).
 
 No API key? The app still runs end to end in **mock mode**: the AI participants use scripted lines, the report uses rule-based feedback, and everything else (turn-taking, voices, timer, interruptions, report) works the same.
+
+## Deploy to Vercel
+
+1. In Vercel, **Add New → Project** and import this GitHub repo. Next.js and bun are detected automatically; no build settings to change.
+2. Add these **Environment Variables** (Production and Preview):
+
+   | Name | Value |
+   |---|---|
+   | `LLM_PROVIDER` | `gemini` |
+   | `GEMINI_API_KEY` | your key from https://aistudio.google.com/apikey |
+   | `TTS_PROVIDER` | `sarvam` |
+   | `SARVAM_API_KEY` | your key from https://dashboard.sarvam.ai |
+
+   Without keys the deployment still works in demo mode (scripted AI lines, browser voices).
+3. Deploy. Vercel serves HTTPS, which browsers require for microphone access.
+
+Notes for a public deployment: the API routes only accept requests from pages on the same site and are rate limited per IP, so your AI credits can't be used from elsewhere. The feedback report route may run for up to 60 seconds. Sessions and recordings are stored in each visitor's browser, not on the server.
 
 ## What it does
 

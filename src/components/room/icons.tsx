@@ -11,7 +11,6 @@ const base = {
   "aria-hidden": true,
 };
 
-
 export const MicIcon = ({ className = "h-5 w-5" }: P) => (
   <svg {...base} className={className}>
     <rect x="9" y="3" width="6" height="11" rx="3" />
@@ -37,14 +36,6 @@ export const HandIcon = ({ className = "h-5 w-5" }: P) => (
   </svg>
 );
 
-export const CcIcon = ({ className = "h-5 w-5" }: P) => (
-  <svg {...base} className={className}>
-    <rect x="3" y="5" width="18" height="14" rx="2" />
-    <path d="M10.5 10.2A2 2 0 1 0 10.5 13.8" />
-    <path d="M17 10.2A2 2 0 1 0 17 13.8" />
-  </svg>
-);
-
 export const ChatIcon = ({ className = "h-5 w-5" }: P) => (
   <svg {...base} className={className}>
     <path d="M4 5h16v11H8l-4 4V5z" />
@@ -63,30 +54,10 @@ export const SendIcon = ({ className = "h-5 w-5" }: P) => (
   </svg>
 );
 
-
-export const PauseIcon = ({ className = "h-5 w-5" }: P) => (
-  <svg {...base} className={className}>
-    <path d="M9 5v14M15 5v14" />
-  </svg>
-);
-
-export const PlayIcon = ({ className = "h-5 w-5" }: P) => (
-  <svg {...base} className={className}>
-    <path d="M7 5v14l11-7z" />
-  </svg>
-);
-
-
 export const KeyboardIcon = ({ className = "h-5 w-5" }: P) => (
   <svg {...base} className={className}>
     <rect x="2" y="6" width="20" height="12" rx="2" />
     <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />
-  </svg>
-);
-
-export const CheckIcon = ({ className = "h-4 w-4" }: P) => (
-  <svg {...base} className={className}>
-    <path d="m5 12 5 5 9-10" />
   </svg>
 );
 

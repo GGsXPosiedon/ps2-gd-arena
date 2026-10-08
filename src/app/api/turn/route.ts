@@ -2,16 +2,24 @@ import { PERSONAS } from "@/lib/personas";
 import { mockTurn } from "@/lib/server/mock";
 import { getProvider, streamText, wantsMock } from "@/lib/server/llm";
 import { buildTurnPrompt, cleanLine } from "@/lib/server/prompts";
+import { guard } from "@/lib/server/guard";
 import type { TurnRequest } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 // Streams one AI participant's line as plain text.
 export async function POST(request: Request) {
+  const refused = guard(request, "turn", 60);
+  if (refused) return refused;
   let req: TurnRequest;
   try {
     req = await request.json();
     if (!PERSONAS[req.speaker]) throw new Error("bad speaker");
+    // Bound what we forward to the model (the prompt only uses the last 24 lines).
+    if (!Array.isArray(req.transcript) || req.config?.topic?.length > 300) throw new Error("bad request");
+    req.transcript = req.transcript.slice(-40).map((u) => ({ ...u, text: String(u.text ?? "").slice(0, 1200) }));
+    if (req.partialStudentText) req.partialStudentText = req.partialStudentText.slice(0, 600);
   } catch {
     return new Response("Invalid request", { status: 400 });
   }

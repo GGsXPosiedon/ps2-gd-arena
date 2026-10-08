@@ -23,20 +23,30 @@ export async function noHmr(page: Page) {
   });
 }
 
-/** Setup → check → room in e2e mode (silent fast captions, 40 s discussion, typed input). */
+/** Topic → panel + mic setup → room in e2e mode (silent fast captions, 40 s discussion, typed input). */
 export async function enterRoom(page: Page, opts: { name?: string; panel?: 3 | 4 | 5 } = {}) {
   await noHmr(page);
   await page.goto("/?e2e=1");
   await expect(page.getByTestId("topic-option").first()).toBeVisible();
   await page.getByTestId("topic-option").first().click();
-  await page.getByTestId(`panel-size-${opts.panel ?? 3}`).click();
+  await pickPanel(page, ["arjun", "priya", "meera", "rohan", "ananya"].slice(0, opts.panel ?? 3));
   if (opts.name) await page.getByTestId("name-input").fill(opts.name);
+  await page.getByTestId("input-keyboard").click();
   await page.getByTestId("enter-room").click();
-  await expect(page).toHaveURL(/\/check$/);
-  await page.getByTestId("continue-typing").click();
-  await expect(page).toHaveURL(/\/room$/);
+  // Start Discussion goes straight into the call: no separate check page, no pre-join screen.
+  await expect(page).toHaveURL(/\/room/);
   await expect(page.getByTestId("room")).toBeVisible();
-  await page.getByTestId("join-voice").click();
+  await expect(page.getByTestId("join-voice")).toHaveCount(0);
+}
+
+const ALL = ["arjun", "priya", "meera", "rohan", "ananya", "kabir"];
+
+/** Selects exactly `ids` on the setup page by toggling avatar buttons (adds first, then removes, to respect 3–5). */
+export async function pickPanel(page: Page, ids: string[]) {
+  const pressed = async (id: string) => (await page.getByTestId(`persona-card-${id}`).getAttribute("aria-pressed")) === "true";
+  for (const id of ids) if (!(await pressed(id))) await page.getByTestId(`persona-card-${id}`).click();
+  for (const id of ALL) if (!ids.includes(id) && (await pressed(id))) await page.getByTestId(`persona-card-${id}`).click();
+  await expect(page.locator('[data-testid^="persona-card-"][aria-pressed="true"]')).toHaveCount(ids.length);
 }
 
 export function lines(page: Page, speaker?: string) {

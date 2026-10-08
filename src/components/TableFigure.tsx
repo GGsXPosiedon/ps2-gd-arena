@@ -7,7 +7,7 @@ import type { PersonaId, SpeakerId } from "@/lib/types";
 
 /**
  * Line-art round table: moderator at the head, AI seats around the sides, you at the foot.
- * When `animate` is on, a green ring moves between speakers and a thin line shows who is replying to whom.
+ * When `animate` is on, a green ring moves between speakers (everyone speaks to the whole table).
  */
 export function TableFigure({
   personas,
@@ -67,12 +67,6 @@ export function TableFigure({
   }, [animate]);
 
   const speaker = script[turn % script.length];
-  const previous = script[(turn - 1 + script.length) % script.length];
-  const pos = (id: SpeakerId) => seats.find((s) => s.id === id);
-  const a = pos(previous);
-  const b = pos(speaker);
-  // Reply line: a soft curve pulled toward the table centre.
-  const path = a && b ? `M ${a.x} ${a.y} Q ${(a.x + b.x) / 2 * 0.6 + cx * 0.4} ${(a.y + b.y) / 2 * 0.6 + cy * 0.4} ${b.x} ${b.y}` : "";
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className={className} role="img" aria-label={`A round table with a moderator, ${personas.length} AI participants and you`}>
@@ -97,20 +91,6 @@ export function TableFigure({
       {/* table */}
       <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="var(--color-surface)" stroke="var(--color-line-2)" />
       <ellipse cx={cx} cy={cy} rx={rx - 14} ry={ry - 12} fill="none" stroke="var(--color-line)" strokeDasharray="2 5" />
-
-      {/* who is replying to whom */}
-      {animate && path && (
-        <path
-          key={turn}
-          d={path}
-          fill="none"
-          stroke="var(--color-fg-3)"
-          strokeWidth="1.2"
-          strokeLinecap="round"
-          strokeDasharray="300"
-          className="tf-draw"
-        />
-      )}
 
       {seats.map(({ id, x, y }) => {
         const active = animate && id === speaker;

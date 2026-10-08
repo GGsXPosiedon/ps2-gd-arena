@@ -1,13 +1,17 @@
+import { guard } from "@/lib/server/guard";
 import { TtsError } from "@/lib/server/tts";
 import { synthesizeSeat, voiceProvider } from "@/lib/server/voices";
 import type { Language, SpeakerId } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 const SEATS = new Set<SpeakerId>(["mod", "arjun", "priya", "meera", "rohan", "ananya", "kabir"]);
 
 // POST {speaker, text, language} -> audio (Sarvam, Google Cloud TTS or Gemini, per TTS_PROVIDER).
 export async function POST(request: Request) {
+  const refused = guard(request, "tts", 120); // lines are split into sentence chunks
+  if (refused) return refused;
   if (!voiceProvider()) return Response.json({ error: "Cloud TTS is not enabled" }, { status: 404 });
 
   let speaker: SpeakerId;

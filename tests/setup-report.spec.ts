@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { SAMPLE_SESSION } from "../src/lib/fixtures/sampleSession";
-import { noHmr, norm } from "./helpers";
+import { noHmr, norm, pickPanel } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
   await noHmr(page);
@@ -39,24 +39,22 @@ test.describe("setup page", () => {
     await page.getByTestId("surprise-me").click();
     await expect(page.getByTestId("topic-change")).toBeVisible();
 
-    // Panel size 3: can't go below 3.
-    await page.getByTestId("panel-size-3").click();
-    await expect(page.locator('[data-testid^="persona-card-"][aria-pressed="true"]')).toHaveCount(3);
+    // 3 picked: can't go below 3.
+    await pickPanel(page, ["arjun", "priya", "meera"]);
     await expect(page.getByTestId("persona-card-arjun")).toHaveAttribute("aria-disabled", "true");
     await page.getByTestId("persona-card-arjun").click({ force: true });
     await expect(page.locator('[data-testid^="persona-card-"][aria-pressed="true"]')).toHaveCount(3);
     await expect(page.getByTestId("persona-card-arjun")).toHaveAttribute("aria-pressed", "true");
 
-    // Panel size 5: can't go above 5.
-    await page.getByTestId("panel-size-5").click();
-    await expect(page.locator('[data-testid^="persona-card-"][aria-pressed="true"]')).toHaveCount(5);
+    // 5 picked: can't go above 5.
+    await pickPanel(page, ["arjun", "priya", "meera", "rohan", "ananya"]);
     await expect(page.getByTestId("persona-card-kabir")).toHaveAttribute("aria-disabled", "true");
     await page.getByTestId("persona-card-kabir").click({ force: true });
     await expect(page.locator('[data-testid^="persona-card-"][aria-pressed="true"]')).toHaveCount(5);
     await expect(page.getByTestId("persona-card-kabir")).toHaveAttribute("aria-pressed", "false");
 
     // Toggling inside the limits works.
-    await page.getByTestId("panel-size-4").click();
+    await pickPanel(page, ["arjun", "priya", "meera", "rohan"]);
     await page.getByTestId("persona-card-kabir").click();
     await expect(page.locator('[data-testid^="persona-card-"][aria-pressed="true"]')).toHaveCount(5);
 
@@ -76,10 +74,14 @@ test.describe("setup page", () => {
     await expect(page.getByText(/except you is an AI/i)).toBeVisible();
     await expect(page.getByText(/Offline demo mode/i)).toBeVisible();
 
-    // Enter → mic check.
+    // Mic block is part of this step now; Start goes straight into the room.
+    await expect(page.getByTestId("input-mic")).toBeVisible();
+    await expect(page.getByTestId("input-keyboard")).toBeVisible();
+    await page.getByTestId("input-mic").click();
+    await expect(page.getByTestId("test-mic")).toBeVisible();
+    await page.getByTestId("input-keyboard").click();
     await page.getByTestId("enter-room").click();
-    await expect(page).toHaveURL(/\/check$/);
-    await expect(page.getByTestId("continue-typing")).toBeVisible();
+    await expect(page).toHaveURL(/\/room/);
   });
 });
 

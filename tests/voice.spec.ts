@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { lines, noHmr, norm, waitForPhase } from "./helpers";
+import { lines, noHmr, norm, pickPanel, waitForPhase } from "./helpers";
 
 // Voice mode with a fake microphone (silence) and a fake Web Speech recognizer that behaves like Chrome:
 // one result keeps growing until it is finalized, and abort() discards it.
@@ -78,10 +78,11 @@ test("speech is committed once: a growing recognizer result is never saved twice
   await fakeVoice(page);
   await page.goto("/?e2e=1");
   await page.getByTestId("topic-option").first().click();
-  await page.getByTestId("panel-size-3").click();
+  await pickPanel(page, ["arjun", "priya", "meera"]);
+  await page.getByTestId("input-mic").click();
   await page.getByTestId("enter-room").click();
-  await page.getByTestId("take-seat").click();
-  await page.getByTestId("join-voice").click();
+  await expect(page).toHaveURL(/\/room/);
+  await expect(page.getByTestId("join-voice")).toHaveCount(0);
   await waitForPhase(page, /discussion/i);
 
   // A pause mid-sentence while the recognizer still holds an unfinalized result.

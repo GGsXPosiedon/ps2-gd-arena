@@ -11,6 +11,7 @@ interface Boot {
   engine: GDEngine;
   config: RoomConfig;
   inputMode: "voice" | "typed";
+  autoStarted: boolean;
 }
 
 export default function RoomPage() {
@@ -26,10 +27,18 @@ export default function RoomPage() {
     const config = loadConfig();
     const inputMode = sessionStorage.getItem("floor:inputMode") === "typed" ? "typed" : "voice";
     const engine = new GDEngine(config, inputMode);
+    // Arriving from "Start Discussion" (same document, so audio is already unlocked): start right away.
+    // A reload or direct visit has no ?start=1 and shows the pre-join screen with its own Start button.
+    const autoStarted = new URLSearchParams(window.location.search).get("start") === "1";
     let cancelled = false;
     // Deferred so the effect doesn't set state synchronously (React strict mode mounts twice).
     Promise.resolve().then(() => {
-      if (!cancelled) setBoot({ engine, config, inputMode });
+      if (cancelled) return;
+      setBoot({ engine, config, inputMode, autoStarted });
+      if (autoStarted) {
+        engine.start();
+        router.replace("/room");
+      }
     });
     return () => {
       cancelled = true;
@@ -38,5 +47,5 @@ export default function RoomPage() {
   }, [router]);
 
   if (!boot) return <div data-testid="room-loading" className="h-dvh bg-canvas" />;
-  return <RoomView engine={boot.engine} config={boot.config} inputMode={boot.inputMode} />;
+  return <RoomView engine={boot.engine} config={boot.config} inputMode={boot.inputMode} autoStarted={boot.autoStarted} />;
 }

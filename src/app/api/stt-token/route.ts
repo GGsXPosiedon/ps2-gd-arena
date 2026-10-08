@@ -1,9 +1,12 @@
+import { guard } from "@/lib/server/guard";
 // Mints a single-use Gemini ephemeral token so the browser can stream mic audio to the
 // live transcription model without seeing GEMINI_API_KEY. Opt-in: STT_PROVIDER=gemini.
 
 export const dynamic = "force-dynamic";
 
-export async function POST() {
+export async function POST(request: Request) {
+  const refused = guard(request, "stt-token", 10);
+  if (refused) return refused;
   const key = process.env.GEMINI_API_KEY;
   if (process.env.STT_PROVIDER !== "gemini" || !key) {
     return Response.json({ error: "Gemini transcription is not configured" }, { status: 404 });

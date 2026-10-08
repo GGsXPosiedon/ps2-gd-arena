@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enterRoom, lines, noHmr, norm, say, waitForPhase } from "./helpers";
+import { enterRoom, lines, noHmr, norm, say, waitForPhase, pickPanel } from "./helpers";
 
 const AI = ["arjun", "priya", "meera"];
 
@@ -125,6 +125,17 @@ test.describe("live GD room (e2e mode: mock AI, silent captions, 40 s discussion
   });
 });
 
+test("visiting /room directly shows the pre-join screen, and Start works", async ({ page }) => {
+  await enterRoom(page, { name: "Aditi" });
+  await waitForPhase(page, /brief|opening|discussion/i);
+  // Reload (no ?start=1): audio needs a fresh click, so the lobby asks for one.
+  await page.goto("/room");
+  await expect(page.getByTestId("join-voice")).toBeVisible();
+  await page.getByTestId("join-voice").click();
+  await waitForPhase(page, /brief|opening|discussion/i);
+  await expect(lines(page, "mod").first()).toBeVisible({ timeout: 15_000 });
+});
+
 test.describe("microphone denied", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -133,29 +144,25 @@ test.describe("microphone denied", () => {
     });
   });
 
-  test("mic check explains the block and offers typing", async ({ page }) => {
+  test("mic test on the setup step explains the block and switches to typing", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("topic-option").first().click();
-    await page.getByTestId("enter-room").click();
-    await expect(page).toHaveURL(/\/check$/);
+    await page.getByTestId("input-mic").click();
     await page.getByTestId("test-mic").click();
-    await expect(page.getByText("Microphone access is blocked")).toBeVisible();
-    await expect(page.getByText(/lock icon/i)).toBeVisible();
-    await expect(page.getByTestId("take-seat")).toBeDisabled();
-    await expect(page.getByTestId("continue-typing")).toBeVisible();
+    await expect(page.getByText(/Microphone access is blocked/i)).toBeVisible();
+    await expect(page.getByTestId("input-keyboard")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("enter-room")).toBeEnabled();
   });
 
   test("room falls back to typing when the mic is denied mid-join", async ({ page }) => {
     await noHmr(page);
     await page.goto("/");
     await page.getByTestId("topic-option").first().click();
-    await page.getByTestId("panel-size-3").click();
+    await pickPanel(page, ["arjun", "priya", "meera"]);
+    // Mic chosen but never tested (or permission revoked later): the room falls back to typing.
+    await page.getByTestId("input-mic").click();
     await page.getByTestId("enter-room").click();
-    await expect(page).toHaveURL(/\/check$/);
-    // Pretend the user picked voice mode (e.g. permission revoked after the check).
-    await page.evaluate(() => sessionStorage.setItem("floor:inputMode", "voice"));
-    await page.goto("/room");
-    await page.getByTestId("join-voice").click();
+    await expect(page).toHaveURL(/\/room/);
     await expect(page.getByText(/Microphone access is blocked/i)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("composer-input")).toBeEnabled();
     await say(page, "Typing works even without a microphone");

@@ -1,17 +1,22 @@
+import { guard } from "@/lib/server/guard";
 import { completeText, getProvider, parseJsonObject, wantsMock } from "@/lib/server/llm";
 import { buildReportPrompt, heuristicReport, verifyReport } from "@/lib/server/report";
 import type { ReportRequest, ReportResult } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 // Builds the feedback report. Never fails because of the LLM: falls back to a heuristic report.
 export async function POST(request: Request) {
+  const refused = guard(request, "report", 8);
+  if (refused) return refused;
   let req: ReportRequest;
   try {
     req = await request.json();
     if (!req?.config?.topic || !Array.isArray(req.utterances) || !Array.isArray(req.events) || !req.metrics) {
       throw new Error("missing fields");
     }
+    if (req.utterances.length > 400 || req.config.topic.length > 300) throw new Error("too large");
     req.openingCandidates = Array.isArray(req.openingCandidates) ? req.openingCandidates : [];
   } catch {
     return new Response("Invalid request", { status: 400 });
