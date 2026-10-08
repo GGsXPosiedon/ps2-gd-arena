@@ -48,3 +48,6 @@ next-env.d.ts
 /design/
 AGENTS.md
 CLAUDE.md
+
+# VAD model + WASM runtime, copied from node_modules on install/build (scripts/copy-vad-assets.mjs)
+/public/vad/

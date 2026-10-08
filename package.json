@@ -4,13 +4,16 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/copy-vad-assets.mjs && next build",
+    "postinstall": "node scripts/copy-vad-assets.mjs",
     "start": "next start",
     "lint": "eslint",
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@ricky0123/vad-web": "^0.0.31",
     "next": "16.4.0",
+    "onnxruntime-web": "^1.30.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
