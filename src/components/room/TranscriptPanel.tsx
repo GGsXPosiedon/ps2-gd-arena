@@ -7,7 +7,7 @@ import type { EngineState } from "@/lib/engine";
 import { speakerName } from "@/lib/personas";
 import type { RoomConfig, Utterance } from "@/lib/types";
 import { fmtClock } from "./format";
-import { SendIcon } from "./icons";
+import { SendIcon, StopwatchIcon } from "./icons";
 
 function Tags({ u, studentName }: { u: Utterance; studentName: string }) {
   const addressee = u.speaker !== "mod" && u.to !== "all" && u.to !== u.speaker ? u.to : null;
@@ -27,6 +27,27 @@ function Header({ speaker, studentName, start }: { speaker: Utterance["speaker"]
       <span className="truncate text-[13px] font-medium text-fg">{speakerName(speaker, studentName)}</span>
       {speaker !== "you" && <AiTag />}
       <span className="ml-auto shrink-0 font-mono text-[11px] text-fg-3 tabular-nums">{start === undefined ? "Now" : fmtClock(start)}</span>
+    </div>
+  );
+}
+
+/** Moderator lines are announcements from the host, not chat messages. */
+function Announcement({ text, start, shown, testId }: { text: string; start?: number; shown?: number; testId: string }) {
+  return (
+    <div data-testid={testId} data-speaker="mod" className="mx-4 my-2 flex gap-2 border-y border-line py-2 text-[12.5px] leading-relaxed">
+      <StopwatchIcon className="mt-0.5 size-3.5 shrink-0 text-fg-3" />
+      <p className="min-w-0 flex-1 break-words">
+        <span className="mr-1.5 font-medium text-fg-3">Moderator</span>
+        {shown === undefined ? (
+          <span className="text-fg-2">{text}</span>
+        ) : (
+          <>
+            <span className="text-fg">{text.slice(0, shown)}</span>
+            <span className="text-fg-3">{text.slice(shown)}</span>
+          </>
+        )}
+      </p>
+      <span className="shrink-0 pt-px font-mono text-[11px] text-fg-3 tabular-nums">{start === undefined ? "Now" : fmtClock(start)}</span>
     </div>
   );
 }
@@ -80,6 +101,7 @@ export const TranscriptPanel = forwardRef<
           </p>
         )}
         {utterances.map((u, i) => {
+          if (u.speaker === "mod") return <Announcement key={u.id} text={u.text} start={u.start} testId="transcript-line" />;
           const prev = utterances[i - 1];
           const grouped = !!prev && prev.speaker === u.speaker && u.start - prev.start < 60_000;
           return (
@@ -101,7 +123,11 @@ export const TranscriptPanel = forwardRef<
           );
         })}
 
-        {live && (
+        {live && live.speaker === "mod" && (
+          <Announcement text={live.text} shown={live.shown} testId="transcript-live" />
+        )}
+
+        {live && live.speaker !== "mod" && (
           <div className="mt-2 flex gap-3 px-4 pt-1.5" data-testid="transcript-live" data-speaker={live.speaker}>
             <div className="w-7 shrink-0">
               <Avatar speaker={live.speaker} studentName={config.studentName} size={28} speaking />

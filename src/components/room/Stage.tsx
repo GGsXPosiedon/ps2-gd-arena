@@ -5,8 +5,8 @@ import { Badge, Button, IconButton, Kbd, Notice, Spinner } from "@/components/ui
 import type { EngineState } from "@/lib/engine";
 import { speakerName } from "@/lib/personas";
 import type { RoomConfig, SpeakerId } from "@/lib/types";
-import { PHASE_LABEL, fmtClock } from "./format";
 import { CcIcon, ChatIcon, HandIcon, KeyboardIcon, MicIcon, MicOffIcon, PauseIcon, PhoneDownIcon, PlayIcon } from "./icons";
+import { HostBar } from "./HostBar";
 import { Lobby } from "./Lobby";
 import { Tile } from "./Tile";
 
@@ -35,22 +35,13 @@ export interface StageProps {
 
 export function Stage(p: StageProps) {
   const { config, state } = p;
-  const seats: SpeakerId[] = ["mod", ...config.personas, "you"];
+  // The moderator is the host (see HostBar), not a seat at the table.
+  const seats: SpeakerId[] = [...config.personas, "you"];
   const lobby = state.status === "idle" || state.status === "starting";
   const running = state.status === "running";
   const typed = state.inputMode === "typed";
   const turn = yourTurn(state);
 
-  const timerText = lobby
-    ? config.e2e
-      ? "00:40"
-      : fmtClock(config.durationMin * 60_000)
-    : state.phase === "closing"
-      ? "Closing"
-      : state.phase === "ended"
-        ? "00:00"
-        : fmtClock(state.timeLeftMs);
-  const lowTime = state.phase === "discussion" && state.timeLeftMs < 60_000;
   const cols = seats.length <= 4 ? "grid-cols-2" : seats.length <= 6 ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2 sm:grid-cols-3 xl:grid-cols-4";
 
   return (
@@ -59,22 +50,9 @@ export function Stage(p: StageProps) {
         <h1 className="min-w-0 flex-1 truncate text-sm font-medium text-fg" title={config.topic}>
           {config.topic}
         </h1>
-        <Badge className="shrink-0">
-          <span data-testid="phase">{lobby ? "Not Started" : PHASE_LABEL[state.phase]}</span>
-        </Badge>
-        <div className="flex shrink-0 items-baseline gap-1.5">
-          {(lobby || state.phase === "brief" || state.phase === "opening" || state.phase === "discussion") && (
-            <span className="hidden text-xs text-fg-3 sm:inline">{lobby ? "Duration" : "Time left"}</span>
-          )}
-          <span
-            data-testid="timer"
-            aria-live="off"
-            className={`font-mono text-base tabular-nums ${lowTime ? "text-[#ff6166]" : "text-fg"}`}
-          >
-            {timerText}
-          </span>
-        </div>
       </header>
+
+      <HostBar config={config} state={state} lobby={lobby} />
 
       {(state.micError || state.aiDegraded || state.ttsSilent) && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 pt-3">
@@ -309,7 +287,7 @@ function EndConfirm({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: 
 }
 
 function Captions({ config, state }: { config: RoomConfig; state: EngineState }) {
-  const live = state.live;
+  const live = state.live && state.live.speaker !== "mod" ? state.live : null; // moderator lines show in the host bar
   const student = state.studentInterim;
   const thinking = !live && !student && state.thinking ? speakerName(state.thinking, config.studentName) : null;
   return (

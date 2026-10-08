@@ -32,6 +32,28 @@ export function Transcript({ session, highlightId }: { session: SessionRecord; h
       <div className="flex-1 overflow-y-auto overscroll-contain py-2">
         {rows.length === 0 && <p className="px-4 py-6 text-[13px] text-fg-2">Nothing to show for this filter.</p>}
         {rows.map((u) => {
+          // The moderator hosts the session: its lines read as announcements, not chat messages.
+          if (u.speaker === "mod") {
+            return (
+              <div
+                key={u.id}
+                id={`utt-${u.id}`}
+                data-testid="report-transcript-line"
+                data-utterance-id={u.id}
+                className={`my-1 flex scroll-mt-16 items-start gap-2 border-y border-l-2 border-y-line px-4 py-1.5 transition-colors ${
+                  highlightId === u.id ? "border-l-fg bg-surface-2" : "border-l-transparent bg-surface/60"
+                }`}
+              >
+                <span className="mt-0.5">
+                  <Avatar speaker="mod" size={16} />
+                </span>
+                <p className="min-w-0 flex-1 text-[12px] leading-5 break-words text-fg-2">
+                  <span className="mr-2 font-mono text-[11px] text-fg-3 tabular-nums">{fmtTime(u.start)}</span>
+                  {u.text}
+                </p>
+              </div>
+            );
+          }
           const cut = interruptEvent(u, session);
           return (
             <div
@@ -50,7 +72,7 @@ export function Transcript({ session, highlightId }: { session: SessionRecord; h
                     {speakerName(u.speaker, sn)}
                   </span>
                   <span className="font-mono text-xs text-fg-3 tabular-nums">{fmtTime(u.start)}</span>
-                  {u.to !== "all" && u.speaker !== "mod" && <Badge>To {speakerName(u.to, sn)}</Badge>}
+                  {u.to !== "all" && <Badge>To {speakerName(u.to, sn)}</Badge>}
                   {u.interrupted && <Badge tone="danger">Cut Off</Badge>}
                   {cut && <Badge tone="danger">{cut.target === "you" ? "Interrupted You" : "Cut In"}</Badge>}
                   {u.intent === "drift" && <Badge>Off-Topic</Badge>}

@@ -7,8 +7,10 @@ test.describe("live GD room (e2e mode: mock AI, silent captions, 40 s discussion
   test("full demo flow: brief → discussion → raise hand → closing → report", async ({ page }) => {
     await enterRoom(page, { name: "Aditi", panel: 3 });
 
-    // Seats for moderator, 3 AIs and the student.
-    for (const id of ["mod", ...AI, "you"]) await expect(page.getByTestId(`seat-${id}`)).toBeVisible();
+    // Seats for the 3 AIs and the student; the moderator is the host bar, not a seat.
+    for (const id of [...AI, "you"]) await expect(page.getByTestId(`seat-${id}`)).toBeVisible();
+    await expect(page.getByTestId("seat-mod")).toHaveCount(0);
+    await expect(page.getByTestId("host-bar")).toBeVisible();
     await expect(page.getByTestId("phase")).toHaveText(/Brief|Opening|Discussion/);
 
     // Moderator brief lands in the transcript.

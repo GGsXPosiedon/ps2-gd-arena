@@ -89,3 +89,12 @@ export const CheckIcon = ({ className = "h-4 w-4" }: P) => (
     <path d="m5 12 5 5 9-10" />
   </svg>
 );
+
+export function StopwatchIcon({ className = "size-3.5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className={className}>
+      <circle cx="12" cy="14" r="7" />
+      <path d="M12 14V10.5M10 2h4M12 2v5" />
+    </svg>
+  );
+}

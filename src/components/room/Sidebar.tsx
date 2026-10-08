@@ -5,18 +5,16 @@ import { focusRing } from "@/components/ui";
 import type { EngineState } from "@/lib/engine";
 import { PERSONAS, speakerName } from "@/lib/personas";
 import type { RoomConfig, SpeakerId } from "@/lib/types";
-import { PHASES } from "./format";
-import { CheckIcon, KeyboardIcon, MicIcon, MicOffIcon } from "./icons";
+import { KeyboardIcon, MicIcon, MicOffIcon } from "./icons";
 
 const SECTION = "px-3 pb-1.5 text-xs font-medium text-fg-3";
 
 export function Sidebar({ config, state, onToggleMute }: { config: RoomConfig; state: EngineState; onToggleMute: () => void }) {
-  const seats: SpeakerId[] = ["mod", ...config.personas, "you"];
+  const seats: SpeakerId[] = [...config.personas, "you"];
+  const modSpeaking = state.live?.speaker === "mod";
   const joined = state.status !== "idle";
   const ended = state.phase === "ended" || state.status === "ending" || state.status === "ended";
-  const phaseIdx = PHASES.findIndex((p) => p.id === state.phase);
   const typed = state.inputMode === "typed";
-  const minutes = config.e2e ? "40 s" : `${config.durationMin} min`;
 
   const connection = !joined
     ? { label: "Not started", dot: "bg-line-2" }
@@ -29,7 +27,7 @@ export function Sidebar({ config, state, onToggleMute }: { config: RoomConfig; s
           : { label: "Live", dot: "bg-ok" };
 
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-canvas md:flex" aria-label="Participants and phases">
+    <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-canvas md:flex" aria-label="Host and participants">
       <header className="flex h-12 shrink-0 items-center border-b border-line px-4">
         <span className="text-sm font-medium text-fg" translate="no">
           GD Floor
@@ -43,12 +41,24 @@ export function Sidebar({ config, state, onToggleMute }: { config: RoomConfig; s
           </p>
         )}
 
-        <h2 className={SECTION}>Participants ({seats.length})</h2>
-        <ul className="mb-6 space-y-px px-1.5">
+        <h2 className={SECTION}>Host</h2>
+        <div className="mx-1.5 mb-6 flex items-center gap-2.5 rounded-lg border border-line px-2 py-2">
+          <Avatar speaker="mod" size={28} speaking={modSpeaking} />
+          <div className="min-w-0 flex-1 leading-tight">
+            <div className={`flex items-center text-[13px] ${modSpeaking ? "text-fg" : "text-fg-2"}`}>
+              Moderator
+              <AiTag />
+            </div>
+            <div className="truncate text-xs text-fg-3">Runs the session</div>
+          </div>
+        </div>
+
+        <h2 className={SECTION}>At the Table ({seats.length})</h2>
+        <ul className="space-y-px px-1.5">
           {seats.map((id) => {
             const isYou = id === "you";
             const speaking = isYou ? state.studentSpeaking : state.live?.speaker === id;
-            const role = id === "mod" ? "Keeps time" : isYou ? (typed ? "Typing" : state.muted ? "Muted" : "Mic on") : PERSONAS[id].archetype;
+            const role = isYou ? (typed ? "Typing" : state.muted ? "Muted" : "Mic on") : PERSONAS[id as keyof typeof PERSONAS].archetype;
             return (
               <li key={id} className="flex items-center gap-2.5 rounded-md px-2 py-1.5">
                 <Avatar speaker={id} studentName={config.studentName} size={24} speaking={speaking} />
@@ -64,29 +74,6 @@ export function Sidebar({ config, state, onToggleMute }: { config: RoomConfig; s
           })}
         </ul>
 
-        <h2 className={SECTION}>Phases</h2>
-        <ol className="space-y-px px-1.5">
-          {PHASES.map((p, i) => {
-            const current = joined && !ended && p.id === state.phase;
-            const done = ended || (joined && phaseIdx > i);
-            return (
-              <li
-                key={p.id}
-                aria-current={current ? "step" : undefined}
-                className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] ${
-                  current ? "bg-surface-3 text-fg" : done ? "text-fg-3" : "text-fg-2"
-                }`}
-              >
-                <span aria-hidden className="grid size-4 shrink-0 place-items-center">
-                  {done ? <CheckIcon className="size-3.5 text-fg-3" /> : <span className={`size-1.5 rounded-full ${current ? "bg-fg" : "bg-line-2"}`} />}
-                </span>
-                <span className="min-w-0 flex-1 truncate">{p.label}</span>
-                {p.id === "discussion" && <span className="text-xs text-fg-3 tabular-nums">{minutes}</span>}
-                {done && <span className="sr-only">(done)</span>}
-              </li>
-            );
-          })}
-        </ol>
       </div>
 
       <footer className="flex shrink-0 items-center gap-2.5 border-t border-line px-3 py-2.5">

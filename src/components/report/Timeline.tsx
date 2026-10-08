@@ -3,9 +3,26 @@
 import { Card } from "@/components/ui";
 import { fmtTime, timelineSegments } from "@/lib/metrics";
 import { speakerColor, speakerName } from "@/lib/personas";
-import type { SessionRecord, StudentMetrics } from "@/lib/types";
+import type { Phase, SessionRecord, StudentMetrics } from "@/lib/types";
 
 const pctFmt = new Intl.NumberFormat("en", { style: "percent", maximumFractionDigits: 0 });
+
+const PHASE_LABEL: Partial<Record<Phase, string>> = { brief: "Brief", opening: "Opening", discussion: "Discussion", closing: "Closing" };
+
+/** Phase bands for the moderator track: from "phase" events, else from the utterances' phases. */
+function phaseBands(s: SessionRecord, total: number): { phase: Phase; start: number; end: number }[] {
+  let marks = s.events
+    .filter((e) => e.type === "phase" && e.detail && e.detail in PHASE_LABEL)
+    .map((e) => ({ phase: e.detail as Phase, t: e.t }));
+  if (!marks.length) {
+    marks = [];
+    for (const u of s.utterances) if (marks.at(-1)?.phase !== u.phase && u.phase in PHASE_LABEL) marks.push({ phase: u.phase, t: u.start });
+  }
+  if (!marks.length) return [];
+  if (marks[0].t > 0) marks[0] = { ...marks[0], t: 0 };
+  const endAt = s.events.find((e) => e.type === "phase" && e.detail === "ended")?.t ?? total;
+  return marks.map((m, i) => ({ phase: m.phase, start: m.t, end: Math.min(marks[i + 1]?.t ?? endAt, total) })).filter((b) => b.end > b.start);
+}
 
 /** Talk-time share bar + "who spoke when" lanes. */
 export function Timeline({
@@ -22,6 +39,8 @@ export function Timeline({
   const pct = (ms: number) => `${(ms / total) * 100}%`;
   const shareOf = (id: string) => metrics.speakers.find((s) => s.speaker === id)?.share ?? 0;
   const participants = lanes.filter((l) => l.speaker !== "mod");
+  const modLane = lanes.find((l) => l.speaker === "mod");
+  const bands = phaseBands(session, total);
 
   return (
     <Card className="p-5">
@@ -45,9 +64,38 @@ export function Timeline({
         ))}
       </div>
 
-      {/* lanes */}
+      {/* moderator track: phases of the session + where the moderator stepped in */}
+      <div data-testid="timeline-phases" className="mb-3 grid grid-cols-[84px_1fr_40px] items-center gap-3 border-b border-line pb-3">
+        <span className="truncate text-[13px] text-fg-3">Moderator</span>
+        <div className="relative h-5 overflow-hidden rounded-sm bg-surface">
+          {bands.map((b) => (
+            <div
+              key={`${b.phase}-${b.start}`}
+              className={`absolute inset-y-0 flex items-center border-r border-canvas px-1.5 ${b.phase === "discussion" ? "bg-surface-3" : "bg-surface-2"}`}
+              style={{ left: pct(b.start), width: pct(b.end - b.start) }}
+              title={`${PHASE_LABEL[b.phase]} · ${fmtTime(b.start)}`}
+            >
+              <span className="truncate text-[11px] text-fg-3">{PHASE_LABEL[b.phase]}</span>
+            </div>
+          ))}
+          {modLane?.segments.map((seg) => (
+            <button
+              key={seg.id}
+              type="button"
+              onClick={() => onJump(seg.id)}
+              aria-label={`Go to the moderator at ${fmtTime(seg.start)}`}
+              title={`Moderator · ${fmtTime(seg.start)}`}
+              className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-fg-3 transition-colors hover:bg-fg focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue"
+              style={{ left: pct(seg.start) }}
+            />
+          ))}
+        </div>
+        <span />
+      </div>
+
+      {/* participant lanes */}
       <div className="space-y-2">
-        {lanes.map((l) => {
+        {participants.map((l) => {
           const name = speakerName(l.speaker, sn);
           return (
             <div key={l.speaker} data-testid={`timeline-lane-${l.speaker}`} className="grid grid-cols-[84px_1fr_40px] items-center gap-3">
@@ -76,7 +124,7 @@ export function Timeline({
                   ))}
               </div>
               <span className={`text-right font-mono text-xs tabular-nums ${l.speaker === "you" ? "text-fg" : "text-fg-3"}`}>
-                {l.speaker === "mod" ? "" : pctFmt.format(shareOf(l.speaker))}
+                {pctFmt.format(shareOf(l.speaker))}
               </span>
             </div>
           );
@@ -99,7 +147,7 @@ export function Timeline({
             Red marks show where someone was cut off.
           </>
         )}{" "}
-        Select a block to see the line.
+        Ticks on the moderator track mark when the moderator stepped in. Select a block or tick to see the line.
       </p>
     </Card>
   );
