@@ -57,6 +57,7 @@ class Stopped extends Error {}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const words = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
+const normText = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, "").replace(/\s+/g, " ").trim();
 
 interface Plan {
   speaker: PersonaId;
@@ -87,7 +88,7 @@ export class GDEngine {
   // audio
   private bank: VoiceBank | null = null;
   private mic: MicHandle | null = null;
-  private stt: { start(): void; stop(): void } | null = null;
+  private stt: { start(): void; stop(): void; restart?(): void } | null = null;
   private recording: Recording | null = null;
   private audioStartOffset = 0;
   private current: { handle: SpeakHandle; speaker: SpeakerId; id: string; interruptible: boolean } | null = null;
@@ -134,7 +135,7 @@ export class GDEngine {
       failed: null,
       handRaised: false,
       muted: false,
-      inputMode: e2e ? "typed" : inputMode,
+      inputMode,
       micError: null,
       notice: null,
       aiDegraded: false,
@@ -430,7 +431,10 @@ export class GDEngine {
       // A late final for a turn we just committed: append to it.
       const last = this.s.utterances.at(-1);
       if (final && last?.speaker === "you" && !last.typed && now - last.end < 1500) {
-        last.text = `${last.text} ${text}`.trim();
+        const a = normText(last.text);
+        const b = normText(text);
+        if (b.startsWith(a)) last.text = text; // the finalized version of what we committed
+        else if (!a.startsWith(b)) last.text = `${last.text} ${text}`.trim();
         last.end = now;
         this.set({ utterances: [...this.s.utterances] });
         return;
@@ -460,7 +464,8 @@ export class GDEngine {
     const turn = this.turn;
     if (!turn || this.s.studentSpeaking) return;
     const silence = this.now() - turn.lastActivity;
-    const endAfter = Math.max(700, this.T.patience);
+    // If the recognizer hasn't finalized the last words yet, give it a moment (finals are more accurate).
+    const endAfter = Math.max(700, this.T.patience) + (turn.interim.trim() ? 600 : 0);
     if (silence >= endAfter) this.commitTurn();
   }
 
@@ -468,9 +473,19 @@ export class GDEngine {
     const turn = this.turn;
     if (!turn) return;
     this.turn = null;
-    const text = [...turn.finals, turn.interim].join(" ").replace(/\s+/g, " ").trim();
+    let text = [...turn.finals, turn.interim].join(" ").replace(/\s+/g, " ").trim();
     this.set({ studentInterim: "", studentSpeaking: false });
-    if (!text) return; // noise, no words
+    // We're keeping an unfinalized result: start a fresh recognition session so it can't be re-sent.
+    if (turn.interim.trim()) this.stt?.restart?.();
+    // Safety net: drop words the recognizer re-sent from the previous line.
+    const prev = [...this.s.utterances].reverse().find((u) => u.speaker === "you" && !u.typed);
+    if (text && prev && this.now() - prev.end < 20_000) {
+      const a = normText(prev.text);
+      const b = normText(text);
+      if (a === b || a.startsWith(b)) text = "";
+      else if (b.startsWith(a)) text = text.split(/\s+/).slice(prev.text.split(/\s+/).length).join(" ");
+    }
+    if (!text) return; // noise, no words, or nothing new
     this.pushUtterance({
       speaker: "you",
       text,

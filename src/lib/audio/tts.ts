@@ -31,7 +31,12 @@ function genderOf(v: SpeechSynthesisVoice): "male" | "female" | "unknown" {
   return "unknown";
 }
 
+// macOS ships novelty and legacy formant voices (they sing, bubble or sound robotic). Never assign them.
+const UNUSABLE =
+  /^(Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Good News|Jester|Organ|Pipe Organ|Superstar|Trinoids|Whisper|Wobble|Zarvox|Fred|Junior|Ralph|Kathy|Princess|Deranged|Hysterical|Agnes|Bruce|Vicki|Victoria|Grandma|Grandpa|Eddy|Flo|Reed|Rocko|Sandy|Shelley)\b/i;
+
 function scoreVoice(v: SpeechSynthesisVoice): number {
+  if (UNUSABLE.test(v.name)) return -1;
   let s = 0;
   const lang = v.lang.toLowerCase().replace("_", "-");
   if (lang === "en-in") s += 50;
@@ -39,6 +44,7 @@ function scoreVoice(v: SpeechSynthesisVoice): number {
   else if (lang.startsWith("en")) s += 10;
   else return -1;
   if (/natural|neural|online|premium|enhanced/i.test(v.name)) s += 15;
+  if (/^Google /.test(v.name)) s += 8; // clear network voices in Chrome
   if (v.localService) s += 3; // local voices emit word boundaries (needed for accurate cut-off text)
   return s;
 }
@@ -65,6 +71,17 @@ function splitSentences(text: string): string[] {
   return parts.map((p) => p.trim()).filter(Boolean);
 }
 
+/** Sentences merged into chunks of at most `max` characters (a single long sentence stays whole). */
+function chunkText(text: string, max: number): string[] {
+  const out: string[] = [];
+  for (const s of splitSentences(text)) {
+    const last = out.at(-1);
+    if (last && last.length + 1 + s.length <= max) out[out.length - 1] = `${last} ${s}`;
+    else out.push(s);
+  }
+  return out.length ? out : [text];
+}
+
 async function cloudTtsAvailable(): Promise<boolean> {
   try {
     const res = await fetch("/api/health", { signal: AbortSignal.timeout(2500) });
@@ -87,6 +104,8 @@ export class VoiceBank {
   private cloudFails = 0;
   private cloudCache = new Map<string, Promise<Blob>>();
   private playing = new Set<HTMLAudioElement>();
+  // Chrome can garbage-collect an utterance mid-speech and never fire "end"; hold a reference.
+  private liveUtterance: SpeechSynthesisUtterance | null = null;
 
   private constructor(silent: boolean, silentWps: number, language: Language) {
     this.silent = silent;
@@ -144,9 +163,12 @@ export class VoiceBank {
         if ((used.get(v.name) ?? 0) === 0) break;
       }
       if (best) used.set(best.name, (used.get(best.name) ?? 0) + 1);
-      // If a voice is shared, nudge pitch so seats still sound different.
+      // Big pitch/rate shifts make synthetic voices garbled, so keep them gentle. A shared voice gets a
+      // slightly different pitch and pace so seats still sound distinct.
       const reuse = best ? (used.get(best.name) ?? 1) - 1 : 0;
-      this.specs.set(sp, { voice: best, rate: cfg.rate, pitch: Math.min(2, Math.max(0.1, cfg.pitch + reuse * 0.18)) });
+      const pitch = 1 + Math.max(-0.06, Math.min(0.06, (cfg.pitch - 1) * 0.4)) + (reuse % 2 ? -0.08 : reuse ? 0.08 : 0);
+      const rate = Math.max(0.95, Math.min(1.08, cfg.rate + (reuse ? 0.04 * reuse : 0)));
+      this.specs.set(sp, { voice: best, rate, pitch });
     }
   }
 
@@ -311,7 +333,9 @@ export class VoiceBank {
 
   private speakReal(speaker: SpeakerId, text: string, onProgress?: (c: number) => void): SpeakHandle {
     const spec = this.specs.get(speaker)!;
-    const sentences = splitSentences(text);
+    // Local voices speak the whole line in one go (no gaps between sentences). Network voices (e.g.
+    // "Google UK English") cut out after ~15 s, so they get a few larger chunks instead.
+    const sentences = spec.voice?.localService ? [text] : chunkText(text, 160);
     let offset = 0; // chars of fully spoken sentences (incl. separating spaces)
     let current = 0; // chars spoken within the current sentence
     let stopped = false;
@@ -394,6 +418,7 @@ export class VoiceBank {
           finish({ spokenText: (text.slice(0, offset) + r.spokenText).trim(), interrupted: r.interrupted, failed: true }),
         );
       };
+      this.liveUtterance = u;
       speechSynthesis.speak(u);
     };
 

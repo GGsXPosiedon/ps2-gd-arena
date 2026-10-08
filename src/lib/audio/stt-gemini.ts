@@ -66,6 +66,9 @@ export class GeminiRecognizer {
       });
   }
 
+  /** Interface parity with Recognizer; Gemini finalizes segments itself. */
+  restart() {}
+
   stop() {
     this.running = false;
     if (this.rotateTimer) clearTimeout(this.rotateTimer);

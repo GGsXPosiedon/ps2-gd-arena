@@ -30,6 +30,7 @@ export class Recognizer {
   private rec: SR | null = null;
   private running = false;
   private restarts = 0;
+  private restartRequested = false;
   private opts: {
     lang: string;
     onInterim?: (text: string) => void;
@@ -52,6 +53,27 @@ export class Recognizer {
     this.spawn(C);
   }
 
+  /**
+   * Drops the in-progress result and starts a fresh session. Called after the engine commits a line that
+   * included interim text; otherwise Chrome keeps growing the same result and re-sends words already committed.
+   */
+  restart() {
+    const C = ctor();
+    const old = this.rec;
+    if (!C || !this.running || !old || this.restartRequested) return;
+    this.restartRequested = true;
+    try {
+      old.abort();
+    } catch {}
+    // onend normally spawns the new session; this covers browsers that never fire it after abort()
+    setTimeout(() => {
+      if (this.restartRequested && this.rec === old && this.running) {
+        this.restartRequested = false;
+        this.spawn(C);
+      }
+    }, 600);
+  }
+
   stop() {
     this.running = false;
     try {
@@ -67,6 +89,7 @@ export class Recognizer {
     rec.interimResults = true;
     rec.maxAlternatives = 1;
     rec.onresult = (e) => {
+      if (this.restartRequested || this.rec !== rec) return; // results from a session being discarded
       this.restarts = 0;
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -90,6 +113,11 @@ export class Recognizer {
     };
     rec.onend = () => {
       if (!this.running || this.rec !== rec) return;
+      if (this.restartRequested) {
+        this.restartRequested = false;
+        this.spawn(C);
+        return;
+      }
       // back off a little if it keeps dying (e.g. offline)
       const delay = Math.min(3000, 100 * 2 ** Math.min(this.restarts, 5));
       this.restarts++;
