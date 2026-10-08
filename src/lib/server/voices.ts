@@ -55,7 +55,7 @@ async function failure(res: Response): Promise<TtsError> {
   return new TtsError(res.status, msg);
 }
 
-async function sarvam(seat: Seat, text: string, language: Language): Promise<{ bytes: Uint8Array; mime: string }> {
+async function sarvam(seat: Seat, text: string, language: Language): Promise<{ bytes: Uint8Array; mime: string; provider?: VoiceProvider }> {
   const v = SARVAM[seat];
   const speaker = overrides("SARVAM_VOICES")[seat] ?? v.speaker;
   const res = await fetch("https://api.sarvam.ai/text-to-speech", {
@@ -79,7 +79,7 @@ async function sarvam(seat: Seat, text: string, language: Language): Promise<{ b
   return { bytes: Uint8Array.from(Buffer.from(b64, "base64")), mime: "audio/wav" };
 }
 
-async function google(seat: Seat, text: string): Promise<{ bytes: Uint8Array; mime: string }> {
+async function google(seat: Seat, text: string): Promise<{ bytes: Uint8Array; mime: string; provider?: VoiceProvider }> {
   const name = overrides("GOOGLE_TTS_VOICES")[seat] ?? GOOGLE[seat];
   const res = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(process.env.GOOGLE_TTS_API_KEY!)}`, {
     method: "POST",
@@ -97,10 +97,42 @@ async function google(seat: Seat, text: string): Promise<{ bytes: Uint8Array; mi
   return { bytes: Uint8Array.from(Buffer.from(body.audioContent, "base64")), mime: "audio/mpeg" };
 }
 
-export async function synthesizeSeat(seat: Seat, text: string, language: Language): Promise<{ bytes: Uint8Array; mime: string }> {
+/** Gemini TTS, retrying on the full Flash TTS model when the default (lite) model is rate-limited. */
+async function geminiWithBackup(seat: Seat, text: string, language: Language): Promise<Uint8Array> {
+  try {
+    return await geminiSynthesize(seat, text, language);
+  } catch (e) {
+    if (e instanceof TtsError && e.status === 429 && !process.env.GEMINI_TTS_MODEL) {
+      return geminiSynthesize(seat, text, language, "gemini-3.8-flash-tts");
+    }
+    throw e;
+  }
+}
+
+// When Sarvam fails (credits used up, quota, outage) we skip it for a while instead of paying its latency on every line.
+let sarvamDownUntil = 0;
+
+function sarvamOutOfCredits(e: unknown): boolean {
+  const status = e instanceof TtsError ? e.status : 0;
+  return status === 402 || status === 403 || status === 429 || /credit|quota|balance|limit/i.test(String((e as Error)?.message));
+}
+
+export async function synthesizeSeat(seat: Seat, text: string, language: Language): Promise<{ bytes: Uint8Array; mime: string; provider?: VoiceProvider }> {
   const p = voiceProvider();
-  if (p === "sarvam") return sarvam(seat, text, language);
+  if (p === "sarvam") {
+    if (Date.now() >= sarvamDownUntil) {
+      try {
+        return { ...(await sarvam(seat, text, language)), provider: "sarvam" };
+      } catch (e) {
+        if (!process.env.GEMINI_API_KEY) throw e;
+        // Out of credits: skip Sarvam for an hour; other failures: retry Sarvam after a minute.
+        sarvamDownUntil = Date.now() + (sarvamOutOfCredits(e) ? 60 * 60_000 : 60_000);
+        console.warn(`[voices] Sarvam failed (${(e as Error).message}); falling back to Gemini TTS`);
+      }
+    }
+    if (process.env.GEMINI_API_KEY) return { bytes: await geminiWithBackup(seat, text, language), mime: "audio/wav", provider: "gemini" };
+  }
   if (p === "google") return google(seat, text);
-  if (p === "gemini") return { bytes: await geminiSynthesize(seat, text, language), mime: "audio/wav" };
+  if (p === "gemini") return { bytes: await geminiWithBackup(seat, text, language), mime: "audio/wav" };
   throw new TtsError(404, "Cloud voices are not enabled");
 }

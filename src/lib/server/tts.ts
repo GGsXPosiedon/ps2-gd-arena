@@ -219,10 +219,11 @@ async function safeError(res: Response): Promise<string> {
   return `TTS provider error ${res.status}`;
 }
 
-export async function synthesize(seat: Seat, text: string, language: Language): Promise<Uint8Array> {
+/** Gemini TTS. Used as the primary provider (TTS_PROVIDER=gemini) or as the fallback when Sarvam fails. */
+export async function synthesize(seat: Seat, text: string, language: Language, modelOverride?: string): Promise<Uint8Array> {
   const key = process.env.GEMINI_API_KEY;
-  if (!key || !ttsEnabled()) throw new TtsError(503, "Cloud TTS is not enabled");
-  const model = process.env.GEMINI_TTS_MODEL || DEFAULT_MODEL;
+  if (!key) throw new TtsError(503, "Cloud TTS is not enabled");
+  const model = modelOverride || process.env.GEMINI_TTS_MODEL || DEFAULT_MODEL;
   const { voice, indian } = await voiceFor(seat, key);
   // Prebuilt studio voices aren't Indian; nudge the delivery (library voices carry the accent themselves).
   const style = [STYLE[seat], language === "hinglish" ? "natural Hinglish" : "", indian ? "" : "Indian English accent"]

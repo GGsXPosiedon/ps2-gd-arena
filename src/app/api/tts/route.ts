@@ -24,9 +24,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { bytes, mime } = await synthesizeSeat(speaker as Exclude<SpeakerId, "you">, text, language);
+    const { bytes, mime, provider } = await synthesizeSeat(speaker as Exclude<SpeakerId, "you">, text, language);
     return new Response(new Blob([bytes as BlobPart], { type: mime }), {
-      headers: { "content-type": mime, "cache-control": "no-store" },
+      headers: { "content-type": mime, "cache-control": "no-store", "x-voice-provider": provider ?? "" },
     });
   } catch (e) {
     const status = e instanceof TtsError ? e.status : (e as Error)?.name === "TimeoutError" ? 504 : 502;
