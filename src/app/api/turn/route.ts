@@ -48,7 +48,11 @@ export async function POST(request: Request) {
     return new Response("AI provider error", { status: 502 });
   }
 
+  let cancelled = false;
   const stream = new ReadableStream({
+    cancel() {
+      cancelled = true; // the client gave up (its own timeout) or navigated away
+    },
     async start(controller) {
       let started = false;
       const push = (t: string) => {
@@ -58,15 +62,18 @@ export async function POST(request: Request) {
           if (!t.trim()) return;
           started = true;
         }
-        controller.enqueue(encoder.encode(t.replace(/\*+/g, "")));
+        if (!cancelled) controller.enqueue(encoder.encode(t.replace(/\*+/g, "")));
       };
       try {
         if (!first.done) push(first.value);
-        for await (const chunk of gen) push(chunk);
+        for await (const chunk of gen) {
+          if (cancelled) break;
+          push(chunk);
+        }
       } catch (e) {
-        console.error("[turn] stream", e);
+        if (!cancelled) console.error("[turn] stream", e);
       }
-      controller.close();
+      if (!cancelled) controller.close();
     },
   });
   return new Response(stream, { headers: { "content-type": "text/plain; charset=utf-8", "x-provider": provider.name } });

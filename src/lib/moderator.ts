@@ -17,8 +17,8 @@ type Lines = {
 };
 
 const EN: Lines = {
-  brief: (topic, minutes, names) =>
-    `Good morning, everyone, and welcome. Today's topic is: ${topic}. You have ${minutes} minute${minutes === 1 ? "" : "s"}. Joining us are ${names}. Please keep it respectful, build on each other's points, and let everyone speak. At the end I'll ask each of you for a short conclusion.`,
+  brief: (topic, minutes) =>
+    `Welcome, everyone. Today's topic: ${topic}. You have ${minutes} minute${minutes === 1 ? "" : "s"}, and I'll ask each of you for a short conclusion at the end.`,
   open: "The floor is open. Who would like to begin?",
   ackHand: (name) => `Go ahead, ${name}.`,
   half: (m) => `Just a reminder, we're at the halfway mark. About ${m} minutes left.`,
@@ -38,8 +38,8 @@ const EN: Lines = {
 };
 
 const HI: Lines = {
-  brief: (topic, minutes, names) =>
-    `Good morning everyone, welcome. Aaj ka topic hai: ${topic}. Aapke paas ${minutes} minutes hain. Aaj hamare saath hain ${names}. Please respectful rahiye, ek dusre ke points pe build kariye, aur sabko bolne dijiye. End mein main sabse ek short conclusion maangungi.`,
+  brief: (topic, minutes) =>
+    `Welcome everyone. Aaj ka topic hai: ${topic}. Aapke paas ${minutes} minutes hain, aur end mein main sabse ek short conclusion maangungi.`,
   open: "Floor open hai. Kaun start karna chahega?",
   ackHand: (name) => `Haan ${name}, boliye.`,
   half: (m) => `Reminder: hum halfway pe hain. Lagbhag ${m} minutes bache hain.`,

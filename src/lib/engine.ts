@@ -816,6 +816,7 @@ export class GDEngine {
     const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0];
     // Prepare the opener's line during the brief, in case the student doesn't start.
     this.openerPrep = this.preloaded(this.opener(), this.fetchLine({ speaker: this.opener(), intent: "open" }, []));
+    this.bank?.preload("mod", L.open); // scripted, so cloud voices can synthesize it during the brief
     await this.say("mod", L.brief(this.cfg.topic, this.cfg.e2e ? 1 : this.cfg.durationMin, list));
   }
   private openerPrep: Promise<string | null> | null = null;

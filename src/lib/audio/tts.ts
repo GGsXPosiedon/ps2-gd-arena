@@ -92,7 +92,7 @@ async function cloudTtsAvailable(): Promise<boolean> {
   }
 }
 
-const CLOUD_CACHE_MAX = 20;
+const CLOUD_CACHE_MAX = 40; // chunks, not lines
 const CLOUD_MAX_FAILS = 3;
 
 export class VoiceBank {
@@ -187,7 +187,7 @@ export class VoiceBank {
   /** Hint that `text` will be spoken soon by `speaker` (lets cloud voices synthesize ahead). No-op for browser voices. */
   preload(speaker: SpeakerId, text: string): void {
     if (!this.cloudActive || speaker === "you" || !text.trim()) return;
-    this.cloudAudio(speaker, text).catch(() => {});
+    for (const chunk of this.cloudChunks(text)) this.cloudAudio(speaker, chunk).catch(() => {});
   }
 
   /** Stops anything playing (used on unmount). */
@@ -222,7 +222,23 @@ export class VoiceBank {
     return p;
   }
 
+  /**
+   * Cloud voices synthesize a whole request before replying, so long lines are split into sentence-sized
+   * chunks that are fetched in parallel and played back to back: sound starts after the first chunk.
+   */
+  private cloudChunks(text: string): string[] {
+    const sentences = splitSentences(text);
+    if (sentences.length <= 1) return [text];
+    // Keep the first chunk short so playback starts quickly; merge the rest into ~160-char pieces.
+    return [sentences[0], ...chunkText(sentences.slice(1).join(" "), 160)];
+  }
+
   private speakCloud(speaker: SpeakerId, text: string, onProgress?: (chars: number) => void): SpeakHandle {
+    const chunks = this.cloudChunks(text);
+    const blobs = chunks.map((c) => this.cloudAudio(speaker, c)); // all requests start now
+    blobs.forEach((b) => b.catch(() => {}));
+    let index = 0; // chunk being played
+    let offset = 0; // chars of text fully played (chunks before `index`, incl. joining spaces)
     let stopped = false;
     let settled = false;
     let audio: HTMLAudioElement | null = null;
@@ -232,63 +248,80 @@ export class VoiceBank {
     let resolveFn!: (r: SpeakResult) => void;
     const done = new Promise<SpeakResult>((r) => (resolveFn = r));
 
-    const cleanup = () => {
+    const release = () => {
       if (progressTimer) clearInterval(progressTimer);
+      progressTimer = null;
       if (audio) {
+        audio.onended = null;
+        audio.onerror = null;
         audio.pause();
         this.playing.delete(audio);
       }
       if (url) URL.revokeObjectURL(url);
+      audio = null;
+      url = null;
     };
     const finish = (r: SpeakResult) => {
       if (settled) return;
       settled = true;
-      cleanup();
+      release();
       resolveFn(r);
     };
     const charsAt = () => {
-      if (!audio || !audio.duration || !isFinite(audio.duration)) return 0;
-      return Math.min(text.length, Math.floor((audio.currentTime / audio.duration) * text.length));
+      const chunk = chunks[index] ?? "";
+      if (!audio || !audio.duration || !isFinite(audio.duration)) return offset;
+      return Math.min(text.length, offset + Math.floor((audio.currentTime / audio.duration) * chunk.length));
     };
     const cutAtWord = (chars: number) => {
       if (chars >= text.length) return text;
       const cut = text.slice(0, chars);
       return cut.slice(0, Math.max(cut.lastIndexOf(" "), 0)).trim();
     };
-    // Cloud failed for this line: speak it with the browser voice instead.
+    // A chunk failed: say the rest of the line with the browser voice.
     const fallback = () => {
       if (stopped || settled) return;
       this.cloudFails++;
-      cleanup();
-      audio = null;
+      release();
+      const said = text.slice(0, offset).trim();
+      const rest = chunks.slice(index).join(" ");
       const browserCanSpeak = !this.silent && !!this.specs.get(speaker)?.voice;
-      inner = this.speakBrowser(speaker, text, onProgress);
-      inner.done.then((r) => finish({ ...r, failed: r.failed || !browserCanSpeak }));
+      inner = this.speakBrowser(speaker, rest, (c) => onProgress?.(offset + c));
+      inner.done.then((r) => finish({ ...r, spokenText: `${said} ${r.spokenText}`.trim(), failed: r.failed || !browserCanSpeak }));
     };
 
-    this.cloudAudio(speaker, text).then(
-      (blob) => {
-        if (stopped || settled) return;
-        url = URL.createObjectURL(blob);
-        const a = new Audio(url);
-        audio = a;
-        this.playing.add(a);
-        a.onended = () => {
-          this.cloudFails = 0;
-          onProgress?.(text.length);
-          finish({ spokenText: text, interrupted: false, failed: false });
-        };
-        a.onerror = () => fallback();
-        progressTimer = setInterval(() => onProgress?.(charsAt()), 100);
-        a.play().then(
-          () => {
-            this.cloudFails = 0;
-          },
-          () => fallback(),
-        );
-      },
-      () => fallback(),
-    );
+    const playChunk = (i: number) => {
+      if (stopped || settled) return;
+      if (i >= chunks.length) {
+        this.cloudFails = 0;
+        onProgress?.(text.length);
+        return finish({ spokenText: text, interrupted: false, failed: false });
+      }
+      index = i;
+      blobs[i].then(
+        (blob) => {
+          if (stopped || settled) return;
+          release();
+          url = URL.createObjectURL(blob);
+          const a = new Audio(url);
+          audio = a;
+          this.playing.add(a);
+          a.onended = () => {
+            offset += chunks[i].length + 1;
+            playChunk(i + 1);
+          };
+          a.onerror = () => fallback();
+          progressTimer = setInterval(() => onProgress?.(charsAt()), 100);
+          a.play().then(
+            () => {
+              this.cloudFails = 0;
+            },
+            () => fallback(),
+          );
+        },
+        () => fallback(),
+      );
+    };
+    playChunk(0);
 
     return {
       done,
@@ -299,8 +332,8 @@ export class VoiceBank {
           inner.stop();
           return;
         }
-        // Still fetching -> nothing was said yet; playing -> cut at the last whole word heard.
-        finish({ spokenText: audio ? cutAtWord(charsAt()) : "", interrupted: true, failed: false });
+        // Cut at the last whole word heard (nothing if the first chunk hadn't started yet).
+        finish({ spokenText: audio || offset ? cutAtWord(charsAt()) : "", interrupted: true, failed: false });
       },
     };
   }
