@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { GDEngine } from "@/lib/engine";
 import type { RoomConfig, SpeakerId } from "@/lib/types";
+import { Lobby } from "./Lobby";
 import { Sidebar } from "./Sidebar";
 import { Stage, yourTurn } from "./Stage";
 import { TranscriptPanel } from "./TranscriptPanel";
@@ -135,6 +136,22 @@ export function RoomView({ engine, config, inputMode }: { engine: GDEngine; conf
       className="h-full"
     />
   );
+
+  // Before the discussion starts: a focused pre-join screen, without the room chrome.
+  if (state.status === "idle" || state.status === "starting") {
+    return (
+      <div data-testid="room" className="flex min-h-dvh flex-col bg-canvas">
+        <header className="flex h-14 shrink-0 items-center border-b border-line px-4 sm:px-6">
+          <span className="text-[15px] font-semibold tracking-tight" translate="no">
+            GD Floor
+          </span>
+        </header>
+        <main id="main" className="flex flex-1 items-center justify-center px-4 py-10">
+          <Lobby config={config} inputMode={inputMode} speakerMode={speakerMode} starting={state.status === "starting"} onJoin={() => engine.start()} />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div data-testid="room" className="flex h-dvh overflow-hidden bg-canvas">

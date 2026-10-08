@@ -7,7 +7,6 @@ import { speakerName } from "@/lib/personas";
 import type { RoomConfig, SpeakerId } from "@/lib/types";
 import { CcIcon, ChatIcon, HandIcon, KeyboardIcon, MicIcon, MicOffIcon, PauseIcon, PhoneDownIcon, PlayIcon } from "./icons";
 import { HostBar } from "./HostBar";
-import { Lobby } from "./Lobby";
 import { Tile } from "./Tile";
 
 export interface StageProps {
@@ -68,11 +67,7 @@ export function Stage(p: StageProps) {
       )}
 
       <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        {lobby ? (
-          <div className="h-full px-4">
-            <Lobby config={config} inputMode={p.inputMode} speakerMode={p.speakerMode} starting={state.status === "starting"} onJoin={p.onJoin} />
-          </div>
-        ) : p.mobileTranscript ? (
+        {p.mobileTranscript ? (
           <div className="flex h-full flex-col">{p.mobileTranscript}</div>
         ) : (
           <div className="flex min-h-full items-center px-4 py-4">
