@@ -16,6 +16,8 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     trace: "retain-on-failure",
+    // Always use the offline mock AI in tests, even when a real API key is configured.
+    extraHTTPHeaders: { "x-floor-mock": "1" },
     screenshot: "only-on-failure",
   },
   projects: [

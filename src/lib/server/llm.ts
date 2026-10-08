@@ -14,6 +14,7 @@ interface Provider {
   apiKey: string;
   fast: string;
   smart: string;
+  fallbacks?: { fast: string[]; smart: string[] }; // tried in order when a model is overloaded or rate-limited
 }
 
 export function getProvider(): Provider {
@@ -27,8 +28,10 @@ export function getProvider(): Provider {
       name: "gemini",
       baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
       apiKey: env.GEMINI_API_KEY,
-      fast: fastOverride || "gemini-3.8-flash",
-      smart: smartOverride || "gemini-3.8-flash",
+      // Measured on the free tier (Oct 2026): 3.5 Flash Lite answers in ~1–1.6 s; 3.8 Flash often took 4–20 s or timed out.
+      fast: fastOverride || "gemini-3.5-flash-lite",
+      smart: smartOverride || "gemini-3.5-flash", // 3.6 Flash returned 503 "high demand" repeatedly
+      fallbacks: { fast: ["gemini-3.1-flash-lite"], smart: ["gemini-3.6-flash", "gemini-3.5-flash-lite"] },
     };
   }
   if ((forced === "anthropic" || !forced) && env.ANTHROPIC_API_KEY) {
@@ -52,6 +55,11 @@ export function getProvider(): Provider {
   return { name: "mock", baseUrl: "", apiKey: "", fast: "mock", smart: "mock" };
 }
 
+/** True when the request asks for the offline mock (the e2e suite sends this header so tests never use real AI quota). */
+export function wantsMock(request: Request): boolean {
+  return request.headers.get("x-floor-mock") === "1";
+}
+
 export interface LlmRequest {
   system: string;
   user: string;
@@ -60,15 +68,16 @@ export interface LlmRequest {
   temperature?: number;
   json?: boolean;
   timeoutMs?: number;
+  modelId?: string; // explicit model (used for fallbacks)
   /** Thinking effort for models that support it (Gemini 3.x can't turn it off, only down to "minimal"). */
-  reasoning?: "minimal" | "low" | "medium" | "high";
+  reasoning?: "minimal" | "low" | "medium" | "high"; // gemini-3.8-flash supports low and up
 }
 
 /** Streams text deltas. Throws on HTTP/network errors. Not for the mock provider. */
 export async function* streamText(req: LlmRequest): AsyncGenerator<string> {
   const p = getProvider();
   if (p.name === "mock") throw new Error("streamText called with mock provider");
-  const model = req.model === "fast" ? p.fast : p.smart;
+  const model = req.modelId ?? (req.model === "fast" ? p.fast : p.smart);
   const signal = AbortSignal.timeout(req.timeoutMs ?? 20000);
 
   const res =
@@ -100,7 +109,10 @@ export async function* streamText(req: LlmRequest): AsyncGenerator<string> {
             temperature: req.temperature ?? 0.9,
             stream: true,
             ...(req.json ? { response_format: { type: "json_object" } } : {}),
-            ...(req.reasoning && p.name === "gemini" && /^gemini-3/.test(model) ? { reasoning_effort: req.reasoning } : {}),
+            // Lite models are fastest on their default thinking; forcing a level only slows them down.
+            ...(req.reasoning && p.name === "gemini" && /^gemini-3/.test(model) && !/lite/.test(model)
+              ? { reasoning_effort: req.reasoning }
+              : {}),
             messages: [
               { role: "system", content: req.system },
               { role: "user", content: req.user },
@@ -110,6 +122,21 @@ export async function* streamText(req: LlmRequest): AsyncGenerator<string> {
 
   if (!res.ok || !res.body) {
     const body = await res.text().catch(() => "");
+    // Some models reject certain thinking levels; retry once with the model's default.
+    if (res.status === 400 && req.reasoning && /thinking level|reasoning/i.test(body)) {
+      yield* streamText({ ...req, reasoning: undefined });
+      return;
+    }
+    // Overloaded or rate-limited: move to the next model in the chain.
+    if (res.status === 429 || res.status === 503 || res.status === 500) {
+      const chain = [req.model === "fast" ? p.fast : p.smart, ...(p.fallbacks?.[req.model] ?? [])];
+      const next = chain[chain.indexOf(model) + 1];
+      if (next) {
+        console.warn(`[llm] ${model} returned ${res.status}; falling back to ${next}`);
+        yield* streamText({ ...req, modelId: next });
+        return;
+      }
+    }
     throw new Error(`${p.name} ${res.status}: ${body.slice(0, 300)}`);
   }
 

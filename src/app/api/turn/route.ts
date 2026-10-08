@@ -1,6 +1,6 @@
 import { PERSONAS } from "@/lib/personas";
 import { mockTurn } from "@/lib/server/mock";
-import { getProvider, streamText } from "@/lib/server/llm";
+import { getProvider, streamText, wantsMock } from "@/lib/server/llm";
 import { buildTurnPrompt, cleanLine } from "@/lib/server/prompts";
 import type { TurnRequest } from "@/lib/types";
 
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   const provider = getProvider();
   const encoder = new TextEncoder();
 
-  if (provider.name === "mock") {
+  if (provider.name === "mock" || wantsMock(request)) {
     const line = mockTurn(req);
     // Stream word by word with a short delay so the client path matches a real provider.
     const stream = new ReadableStream({
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   const name = PERSONAS[req.speaker].name;
 
   // Pull the first chunk before responding so provider errors surface as HTTP errors (client retries).
-  const gen = streamText({ system, user, model: "fast", maxTokens, temperature: 0.95, timeoutMs: 12000, reasoning: "minimal" });
+  const gen = streamText({ system, user, model: "fast", maxTokens, temperature: 0.95, timeoutMs: 12000, reasoning: "low" });
   let first: IteratorResult<string>;
   try {
     first = await gen.next();

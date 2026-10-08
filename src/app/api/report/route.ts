@@ -1,4 +1,4 @@
-import { completeText, getProvider, parseJsonObject } from "@/lib/server/llm";
+import { completeText, getProvider, parseJsonObject, wantsMock } from "@/lib/server/llm";
 import { buildReportPrompt, heuristicReport, verifyReport } from "@/lib/server/report";
 import type { ReportRequest, ReportResult } from "@/lib/types";
 
@@ -17,12 +17,31 @@ export async function POST(request: Request) {
     return new Response("Invalid request", { status: 400 });
   }
 
-  if (getProvider().name === "mock") return Response.json(heuristicReport(req));
+  if (getProvider().name === "mock" || wantsMock(request)) return Response.json(heuristicReport(req));
 
   try {
     const { system, user } = buildReportPrompt(req);
-    const text = await completeText({ system, user, model: "smart", json: true, maxTokens: 8000, temperature: 0.3, timeoutMs: 60000, reasoning: "medium" });
-    const report = verifyReport(parseJsonObject<Partial<ReportResult>>(text), req.utterances);
+    // Models occasionally return malformed JSON: retry once (on the first fallback model, if any).
+    const retryModel = getProvider().fallbacks?.smart[0];
+    let parsed: Partial<ReportResult> | null = null;
+    for (const modelId of [undefined, retryModel]) {
+      try {
+        const text = await completeText({ system, user, model: "smart", modelId, json: true, maxTokens: 8000, temperature: 0.3, timeoutMs: 60000, reasoning: "medium" });
+        parsed = parseJsonObject<Partial<ReportResult>>(text);
+        break;
+      } catch (e) {
+        if (!(e instanceof SyntaxError)) throw e;
+        console.warn("[report] malformed JSON, retrying");
+      }
+    }
+    if (!parsed) throw new Error("no valid JSON after retry");
+    const report = verifyReport(parsed, req.utterances);
+    // Keep the short, measured reason (e.g. "2.4 s pause") rather than the model paraphrasing it.
+    const candidates = new Map(req.openingCandidates.map((c) => [c.afterUtteranceId, c]));
+    report.missedOpenings = report.missedOpenings.map((m) => {
+      const c = candidates.get(m.afterUtteranceId);
+      return c ? { ...m, reason: c.reason, at: c.at } : m;
+    });
     // An LLM reply with no usable evidence is no better than the heuristic.
     if (report.feedback.length === 0 && req.utterances.some((u) => u.speaker === "you")) throw new Error("no verified feedback");
     return Response.json(report);

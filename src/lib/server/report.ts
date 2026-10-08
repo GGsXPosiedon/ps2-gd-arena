@@ -84,7 +84,8 @@ Rules:
 - 1-2 feedback points per criterion, covering all six criteria when the candidate spoke at all.
 - Quote ONLY the candidate's own lines, copied exactly. Exception: for initiation, if the candidate did not start, you may quote the moderator's opening line.
 - Every "try" point must include couldHaveSaid, written in the candidate's voice, in English.
-- missedOpenings: at most 3, only from the candidate list above.`;
+- missedOpenings: at most 3, only from the candidate list above. Copy "reason" exactly from that list.
+- Write summary, biggestOpportunity, point and context in the second person, addressed to the candidate ("You opened...", "Your point on..."). Never refer to them by name or as "the candidate".`;
   return { system, user };
 }
 
