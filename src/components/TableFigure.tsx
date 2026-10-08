@@ -107,14 +107,14 @@ export function TableFigure({
               </g>
             ) : (
               <g>
-                <circle r="15" fill={speakerColor(id)} />
+                <circle r="15" fill={id === "you" ? "var(--color-fg)" : speakerColor(id)} />
                 {id === "you" ? (
                   <text
                     textAnchor="middle"
                     dominantBaseline="central"
                     fontSize={studentName.trim() ? 12 : 9}
                     fontWeight="600"
-                    fill="#000"
+                    fill="var(--color-canvas)"
                     style={{ fontFamily: "var(--font-sans)" }}
                   >
                     {studentName.trim() ? studentName.trim()[0].toUpperCase() : "You"}

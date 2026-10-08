@@ -2,7 +2,7 @@
 
 Voice-first AI group discussion practice arena for Technical Hackathon Problem Statement 2.
 
-Practise a campus-placement group discussion (GD) out loud with 3–5 AI participants and an AI moderator, then get a report where every feedback point links to a quoted moment from your discussion.
+**GD Arena**: practise a campus-placement group discussion (GD) out loud with 3–5 AI participants and an AI moderator, then get a report where every feedback point links to a quoted moment from your discussion.
 
 ## Run it
 
@@ -42,6 +42,8 @@ Notes for a public deployment: the API routes only accept requests from pages on
 | Live room | Discord-style voice room. Moderator brief → open floor → timed discussion → closing round. AIs wait for pauses, never talk over each other, reply to each other by name, stop when you talk over them; the dominator sometimes cuts you off (hold the floor to make him yield). Raise hand, live captions, transcript, typing |
 | Resilience | Offline → session pauses and resumes; failed AI call → retry, another participant, then the moderator fills in; no voices / TTS failure → captions only |
 | Report | Readiness score, biggest opportunity, six criteria (starting the discussion, quality of ideas, building on others, listening, handling interruptions, ending strongly) with quoted, timestamped evidence you can jump to and replay; who spoke when; numbers against healthy ranges; missed openings with "what you could have said" |
+
+Dark and light themes: use the toggle in the header (defaults to your system setting).
 
 ## How it works
 

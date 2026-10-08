@@ -13,6 +13,7 @@ import { Moments } from "@/components/report/Moments";
 import { Timeline } from "@/components/report/Timeline";
 import { TranscriptDrawer } from "@/components/report/TranscriptDrawer";
 import { useReplay } from "@/components/report/useReplay";
+import { SiteHeader } from "@/components/SiteHeader";
 import { Sparkline } from "@/components/Sparkline";
 import { Badge, Button, buttonClass, Card, Notice, Spinner, focusRing } from "@/components/ui";
 import { SAMPLE_SESSION } from "@/lib/fixtures/sampleSession";
@@ -217,12 +218,13 @@ export default function ReportView({ id }: { id: string }) {
     [jump],
   );
 
-  /** Same topic and panel, straight to the mic check. `focus` adds a drill goal shown in the room lobby. */
+  /** Same topic and panel, back to the setup panel. `focus` adds a drill goal shown before the call. */
   const practise = useCallback(
     (focus?: string) => {
       if (!session) return;
-      saveConfig({ ...session.config, focus, e2e: focus ? false : session.config.e2e });
-      router.push("/check");
+      const e2e = !focus && !!session.config.e2e;
+      saveConfig({ ...session.config, focus, e2e });
+      router.push(e2e ? "/?step=table&e2e=1" : "/?step=table");
     },
     [session, router],
   );
@@ -234,15 +236,18 @@ export default function ReportView({ id }: { id: string }) {
 
   if (!session) {
     return (
-      <main id="main" className="grid min-h-screen place-items-center p-6">
-        <Card className="max-w-sm p-6 text-center">
-          <h1 className="text-base font-semibold text-fg">Report Not Found</h1>
-          <p className="mt-2 text-[13px] text-pretty text-fg-2">Reports are saved only in the browser that ran the discussion.</p>
-          <Link href="/" className={buttonClass("primary", "md", "mt-5")}>
-            Start a Discussion
-          </Link>
-        </Card>
-      </main>
+      <div className="flex min-h-screen flex-col">
+        <SiteHeader wide />
+        <main id="main" className="grid flex-1 place-items-center p-6">
+          <Card className="max-w-sm p-6 text-center">
+            <h1 className="text-base font-semibold text-fg">Report Not Found</h1>
+            <p className="mt-2 text-[13px] text-pretty text-fg-2">Reports are saved only in the browser that ran the discussion.</p>
+            <Link href="/" className={buttonClass("primary", "md", "mt-5")}>
+              Start a Discussion
+            </Link>
+          </Card>
+        </main>
+      </div>
     );
   }
   if (!metrics) return null;
@@ -264,7 +269,7 @@ export default function ReportView({ id }: { id: string }) {
 
   const heuristicNote = report?.source === "heuristic" && (
     <div className="flex flex-wrap items-center gap-3">
-      <Badge>{demo ? "Demo Mode: Rule-Based Feedback" : "Rule-Based Feedback"}</Badge>
+      <Badge>Rule-Based Feedback</Badge>
       {showRetryAi && (
         <Button data-testid="retry-feedback" variant="secondary" size="sm" onClick={retry} disabled={loading}>
           {loading && <Spinner className="size-3.5" />}
@@ -277,35 +282,22 @@ export default function ReportView({ id }: { id: string }) {
   return (
     <div data-testid="report" className="min-h-screen">
       {/* ---------- header ---------- */}
-      <header className="sticky top-0 z-30 border-b border-line bg-canvas/85 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
-          <div className="flex min-w-0 items-center gap-2 text-sm">
-            <Link href="/" className={`shrink-0 rounded-sm font-semibold tracking-tight text-fg ${focusRing}`}>
-              GD Floor
-            </Link>
-            <span aria-hidden className="text-fg-3">
-              /
-            </span>
-            <span className="truncate text-fg-2">Report</span>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {/* Wrappers carry the responsive visibility (the buttons' own display class would override "hidden"). */}
-            <span className="hidden md:flex">
-              <Button variant="ghost" size="sm" onClick={() => exportTranscript(session)}>
-                Export Transcript
-              </Button>
-            </span>
-            <span className="hidden gap-2 sm:flex">
-              <Link href="/" data-testid="new-discussion" className={buttonClass("secondary", "sm")}>
-                New Discussion
-              </Link>
-            </span>
-            <Button variant="primary" size="sm" data-testid="practice-again" onClick={() => practise()}>
-              Practice Again
-            </Button>
-          </div>
-        </div>
-      </header>
+      <SiteHeader wide>
+        {/* Wrappers carry the responsive visibility (the buttons' own display class would override "hidden"). */}
+        <span className="hidden md:flex">
+          <Button variant="ghost" size="sm" onClick={() => exportTranscript(session)}>
+            Export Transcript
+          </Button>
+        </span>
+        <span className="hidden sm:flex">
+          <Link href="/" data-testid="new-discussion" className={buttonClass("secondary", "sm")}>
+            New Discussion
+          </Link>
+        </span>
+        <Button variant="primary" size="sm" data-testid="practice-again" onClick={() => practise()}>
+          Practice Again
+        </Button>
+      </SiteHeader>
 
       {/* ---------- section nav ---------- */}
       <nav aria-label="Report sections" className="sticky top-14 z-20 border-b border-line bg-canvas/85 backdrop-blur">

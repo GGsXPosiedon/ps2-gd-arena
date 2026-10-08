@@ -7,7 +7,8 @@ import { flushSync } from "react-dom";
 import { Avatar } from "@/components/Avatar";
 import { MicTest, type InputChoice } from "@/components/MicTest";
 import { TableFigure } from "@/components/TableFigure";
-import { Badge, Button, Input, Segmented, Switch, buttonClass, focusRing } from "@/components/ui";
+import { SiteHeader } from "@/components/SiteHeader";
+import { Badge, Button, Input, Segmented, Switch, focusRing } from "@/components/ui";
 import { PERSONAS, PERSONA_ORDER } from "@/lib/personas";
 import { DEFAULT_CONFIG, hasSavedConfig, listSessions, loadConfig, saveConfig } from "@/lib/storage";
 import { CATEGORIES, CUSTOM_TOPIC_MAX, CUSTOM_TOPIC_MIN, TOPICS, validateCustomTopic, type TopicCategory } from "@/lib/topics";
@@ -206,10 +207,10 @@ export default function SetupPage() {
   // Readiness change vs the previous scored session (sessions are newest first).
   function delta(i: number): number | null {
     const list = sessions ?? [];
-    const cur = list[i]?.report?.readiness;
-    if (cur === undefined) return null;
-    const prev = list.slice(i + 1).find((s) => s.report)?.report?.readiness;
-    return prev === undefined ? null : cur - prev;
+    const scored = (x?: SessionRecord) => !!x?.report && x.utterances.some((u) => u.speaker === "you");
+    if (!scored(list[i])) return null;
+    const prev = list.slice(i + 1).find(scored);
+    return prev ? list[i].report!.readiness - prev.report!.readiness : null;
   }
 
   const panelCount = config.personas.length;
@@ -219,198 +220,200 @@ export default function SetupPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-20 border-b border-line bg-canvas/80 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
-          <span className="text-[15px] font-semibold tracking-tight" translate="no">
-            GD Floor
+      <SiteHeader>
+        {health?.provider === "mock" && (
+          <span title="No AI key is configured, so the AI participants use scripted lines.">
+            <Badge tone="warn">Offline Demo Mode</Badge>
           </span>
-          <div className="flex items-center gap-2">
-            {health?.provider === "mock" && (
-              <span title="The AI participants use scripted lines in demo mode.">
-                <Badge tone="warn">Offline Demo Mode</Badge>
-              </span>
-            )}
-            <Link href="/report/sample" className={buttonClass("ghost", "sm")}>
-              Sample Report
-            </Link>
-          </div>
-        </div>
-      </header>
+        )}
+      </SiteHeader>
 
       {step === "topic" ? (
-        // ================= step 1: topic =================
+        // ================= step 1: topic, one pane =================
         <main
           id="main"
-          className="mx-auto grid min-h-[calc(100dvh-3.5rem)] max-w-5xl items-start gap-12 px-4 pt-[10vh] pb-16 sm:px-6 lg:grid-cols-[minmax(0,1fr)_400px]"
+          className="mx-auto grid min-h-[calc(100dvh-3.5rem-1px)] max-w-5xl items-center gap-10 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,36rem)_minmax(0,1fr)]"
         >
-          <div className="flex min-h-full min-w-0 flex-col">
-          <p className="text-sm text-fg-3">Group discussion practice</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-balance sm:text-4xl">What should the group discuss?</h1>
+          <div className="flex min-w-0 flex-col">
+          <section aria-labelledby="topic-question" className="rounded-2xl border border-line bg-surface">
+            <div className="p-5 sm:p-6">
+              <p className="text-[13px] text-fg-3">Group discussion practice</p>
+              <h1 id="topic-question" className="mt-1 text-2xl font-semibold tracking-tight text-balance">
+                What should the group discuss?
+              </h1>
 
-          <form
-            className="mt-8"
-            onSubmit={(e) => {
-              e.preventDefault();
-              submitCustom();
-            }}
-          >
-            <label htmlFor="custom-topic" className="sr-only">
-              Your own topic
-            </label>
-            <div
-              className={`flex items-center gap-2 rounded-xl border bg-surface pr-2 pl-4 transition-colors focus-within:border-fg-3 ${
-                error ? "border-danger/60" : "border-line-2 hover:border-[#454545]"
-              }`}
-              style={inputMorph ? { viewTransitionName: "topic" } : undefined}
-            >
-              <input
-                ref={inputRef}
-                id="custom-topic"
-                name="topic"
-                autoComplete="off"
-                data-testid="custom-topic-input"
-                value={custom}
-                onChange={(e) => {
-                  setCustom(e.target.value);
-                  setError(null);
+              <form
+                className="mt-5"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submitCustom();
                 }}
-                maxLength={CUSTOM_TOPIC_MAX + 20}
-                placeholder="Write your own topic…"
-                aria-invalid={!!error}
-                aria-describedby={error ? "custom-topic-error" : undefined}
-                className="h-14 min-w-0 flex-1 bg-transparent text-base text-fg outline-none placeholder:text-fg-3 sm:text-lg"
-              />
-              <Button type="submit" variant={custom.trim() ? "primary" : "ghost"} size="sm" data-testid="topic-continue" aria-label="Use this topic">
-                <ArrowRight />
-              </Button>
-            </div>
-            <p id="custom-topic-error" role="alert" className="mt-2 min-h-5 text-[13px] text-[#ff8a8e]">
-              {error}
-            </p>
-          </form>
-
-          <div className="mt-4">
-            <div role="tablist" aria-label="Topic category" className="-mx-1 flex flex-wrap gap-1 px-1">
-              {CATEGORIES.map((c, i) => {
-                const active = c === category;
-                return (
-                  <button
-                    key={c}
-                    ref={(el) => {
-                      tabRefs.current[i] = el;
-                    }}
-                    type="button"
-                    role="tab"
-                    id={`tab-${i}`}
-                    aria-selected={active}
-                    aria-controls="topic-list"
-                    tabIndex={active ? 0 : -1}
-                    onClick={() => setCategory(c)}
-                    onKeyDown={(e) => onTabKey(e, i)}
-                    className={`h-7 shrink-0 rounded-full px-3 text-[13px] whitespace-nowrap transition-colors ${focusRing} ${
-                      active ? "bg-surface-3 text-fg" : "text-fg-2 hover:text-fg"
-                    }`}
-                  >
-                    {c}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <ul id="topic-list" role="tabpanel" aria-labelledby={`tab-${CATEGORIES.indexOf(category)}`} className="mt-3 divide-y divide-line border-y border-line">
-            {TOPICS.filter((t) => t.category === category).map((t) => (
-              <li key={t.title}>
-                <button
-                  type="button"
-                  data-testid="topic-option"
-                  aria-pressed={config.topic === t.title}
-                  onClick={(e) => chooseTopic(t.title, t.category, e.currentTarget.querySelector<HTMLElement>("[data-topic-text]"))}
-                  className={`group flex w-full items-center justify-between gap-4 px-1 py-3.5 text-left text-[15px] text-fg-2 transition-colors hover:text-fg ${focusRing}`}
-                >
-                  <span data-topic-text className="min-w-0 text-pretty">
-                    {t.title}
-                  </span>
-                  <ArrowRight className="shrink-0 text-fg-3 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
-                </button>
-              </li>
-            ))}
-            <li>
-              <button
-                type="button"
-                data-testid="surprise-me"
-                onClick={surprise}
-                className={`group flex w-full items-center gap-2 px-1 py-3.5 text-left text-[15px] text-fg-3 transition-colors hover:text-fg ${focusRing}`}
               >
-                <ShuffleIcon />
-                Surprise me with a random topic
-              </button>
-            </li>
-          </ul>
+                <label htmlFor="custom-topic" className="sr-only">
+                  Your own topic
+                </label>
+                <div
+                  className={`flex items-center gap-2 rounded-xl border bg-canvas pr-1.5 pl-4 transition-colors focus-within:border-fg-3 ${
+                    error ? "border-danger/60" : "border-line-2 hover:border-fg-3"
+                  }`}
+                  style={inputMorph ? { viewTransitionName: "topic" } : undefined}
+                >
+                  <input
+                    ref={inputRef}
+                    id="custom-topic"
+                    name="topic"
+                    autoComplete="off"
+                    data-testid="custom-topic-input"
+                    value={custom}
+                    onChange={(e) => {
+                      setCustom(e.target.value);
+                      setError(null);
+                    }}
+                    maxLength={CUSTOM_TOPIC_MAX + 20}
+                    placeholder="Write your own topic…"
+                    aria-invalid={!!error}
+                    aria-describedby={error ? "custom-topic-error" : undefined}
+                    className="h-12 min-w-0 flex-1 bg-transparent text-base text-fg outline-none placeholder:text-fg-3"
+                  />
+                  <Button type="submit" variant={custom.trim() ? "primary" : "ghost"} size="sm" data-testid="topic-continue" aria-label="Use this topic">
+                    <ArrowRight />
+                  </Button>
+                </div>
+                {error && (
+                  <p id="custom-topic-error" role="alert" className="mt-2 text-[13px] text-danger">
+                    {error}
+                  </p>
+                )}
+              </form>
 
-          {saved && (
-            <button
-              type="button"
-              data-testid="use-last-setup"
-              onClick={useLastSetup}
-              className={`group mt-6 flex items-center gap-2 self-start text-[13px] text-fg-3 transition-colors hover:text-fg ${focusRing} rounded`}
-            >
-              <span className="min-w-0 truncate">
-                Use last setup: <span className="text-fg-2 group-hover:text-fg">{saved.topic}</span> · {saved.personas.length} AI · {saved.durationMin} min
-              </span>
-              <ArrowRight className="shrink-0" />
-            </button>
-          )}
-
-          {sessions && sessions.length > 0 && (
-            <section aria-labelledby="recent-heading" className="mt-auto pt-14">
-              <h2 id="recent-heading" className="mb-2 text-[13px] text-fg-3">
-                Recent
-              </h2>
-              <ul className="divide-y divide-line">
-                {sessions.slice(0, 3).map((s, i) => {
-                  const d = delta(i);
+              <div role="tablist" aria-label="Topic category" className="mt-5 -mx-1 flex flex-wrap gap-1 px-1">
+                {CATEGORIES.map((c, i) => {
+                  const active = c === category;
                   return (
-                    <li key={s.id}>
-                      <Link
-                        href={`/report/${s.id}`}
-                        data-testid="recent-session"
-                        className={`flex items-center gap-4 py-2.5 text-[13px] text-fg-2 transition-colors hover:text-fg ${focusRing} rounded`}
-                      >
-                        <span className="min-w-0 flex-1 truncate">{s.config.topic}</span>
-                        <span className="shrink-0 text-fg-3 tabular-nums">{dateFmt.format(new Date(s.createdAt))}</span>
-                        <span className="w-16 shrink-0 text-right tabular-nums">
-                          {s.report ? (
-                            <>
-                              {s.report.readiness}
-                              {d !== null && d !== 0 && (
-                                <span className={d > 0 ? "ml-1 text-ok" : "ml-1 text-[#ff8a8e]"}>
-                                  {d > 0 ? "+" : "−"}
-                                  {Math.abs(d)}
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-fg-3">No score</span>
-                          )}
-                        </span>
-                      </Link>
-                    </li>
+                    <button
+                      key={c}
+                      ref={(el) => {
+                        tabRefs.current[i] = el;
+                      }}
+                      type="button"
+                      role="tab"
+                      id={`tab-${i}`}
+                      aria-selected={active}
+                      aria-controls="topic-list"
+                      tabIndex={active ? 0 : -1}
+                      onClick={() => setCategory(c)}
+                      onKeyDown={(e) => onTabKey(e, i)}
+                      className={`h-7 shrink-0 rounded-full px-3 text-[13px] whitespace-nowrap transition-colors ${focusRing} ${
+                        active ? "bg-surface-3 text-fg" : "text-fg-2 hover:text-fg"
+                      }`}
+                    >
+                      {c}
+                    </button>
                   );
                 })}
-              </ul>
-            </section>
+              </div>
+            </div>
+
+            <ul
+              id="topic-list"
+              role="tabpanel"
+              aria-labelledby={`tab-${CATEGORIES.indexOf(category)}`}
+              className="max-h-[min(20rem,34vh)] divide-y divide-line overflow-y-auto overscroll-contain border-t border-line"
+            >
+              {TOPICS.filter((t) => t.category === category).map((t) => (
+                <li key={t.title}>
+                  <button
+                    type="button"
+                    data-testid="topic-option"
+                    aria-pressed={config.topic === t.title}
+                    onClick={(e) => chooseTopic(t.title, t.category, e.currentTarget.querySelector<HTMLElement>("[data-topic-text]"))}
+                    className={`group flex w-full items-center justify-between gap-4 px-5 py-3 text-left text-sm text-fg-2 transition-colors hover:bg-surface-2 hover:text-fg sm:px-6 ${focusRing}`}
+                  >
+                    <span data-topic-text className="min-w-0 text-pretty">
+                      {t.title}
+                    </span>
+                    <ArrowRight className="shrink-0 text-fg-3 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            <button
+              type="button"
+              data-testid="surprise-me"
+              onClick={surprise}
+              className={`flex w-full items-center gap-2 rounded-b-2xl border-t border-line px-5 py-3 text-left text-sm text-fg-2 transition-colors hover:bg-surface-2 hover:text-fg sm:px-6 ${focusRing}`}
+            >
+              <ShuffleIcon />
+              Surprise me
+            </button>
+          </section>
+
+          {(saved || (sessions && sessions.length > 0)) && (
+            <div className="mt-4 space-y-3 px-1">
+              {saved && (
+                <button
+                  type="button"
+                  data-testid="use-last-setup"
+                  onClick={useLastSetup}
+                  className={`group flex max-w-full items-center gap-2 rounded text-[13px] text-fg-3 transition-colors hover:text-fg ${focusRing}`}
+                >
+                  <span className="min-w-0 truncate">
+                    Use last setup: <span className="text-fg-2 group-hover:text-fg">{saved.topic}</span>
+                  </span>
+                  <ArrowRight className="shrink-0" />
+                </button>
+              )}
+
+              {sessions && sessions.length > 0 && (
+                <section aria-labelledby="recent-heading">
+                  <h2 id="recent-heading" className="text-[13px] text-fg-3">
+                    Recent
+                  </h2>
+                  <ul className="mt-1">
+                    {sessions.slice(0, 3).map((s, i) => {
+                      const d = delta(i);
+                      return (
+                        <li key={s.id}>
+                          <Link
+                            href={`/report/${s.id}`}
+                            data-testid="recent-session"
+                            className={`flex items-center gap-4 rounded py-1.5 text-[13px] text-fg-2 transition-colors hover:text-fg ${focusRing}`}
+                          >
+                            <span className="min-w-0 flex-1 truncate">{s.config.topic}</span>
+                            <span className="shrink-0 text-fg-3 tabular-nums">{dateFmt.format(new Date(s.createdAt))}</span>
+                            <span className="w-14 shrink-0 text-right tabular-nums">
+                              {/* No score when the student didn't speak (nothing was assessed). */}
+                              {s.report && s.utterances.some((u) => u.speaker === "you") ? (
+                                <>
+                                  {s.report.readiness}
+                                  {d !== null && d !== 0 && (
+                                    <span className={d > 0 ? "ml-1 text-ok" : "ml-1 text-danger"}>
+                                      {d > 0 ? "+" : "−"}
+                                      {Math.abs(d)}
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-fg-3">–</span>
+                              )}
+                            </span>
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              )}
+            </div>
           )}
           </div>
 
-          <aside className="sticky top-24 hidden lg:block" aria-hidden="true">
-            <figure className="animate-rise rounded-2xl border border-line" style={{ animationDelay: "150ms" }}>
-              <TableFigure personas={config.personas} className="w-full" />
-              <figcaption className="border-t border-line px-5 py-3 text-[13px] text-fg-3">
-                A moderator, AI participants and you around one table.
-              </figcaption>
-            </figure>
-          </aside>
+          {/* The table: the AI participants, the moderator and you. Hidden on phones to keep the pane in focus. */}
+          <figure className="animate-rise hidden lg:block" style={{ animationDelay: "120ms" }} aria-hidden="true">
+            <TableFigure personas={config.personas} studentName={config.studentName} className="w-full" />
+            <figcaption className="mt-2 text-center text-[13px] text-fg-3">A moderator, AI participants and you around one table.</figcaption>
+          </figure>
         </main>
       ) : (
         // ================= step 2: panel + settings, one screen =================
@@ -434,7 +437,7 @@ export default function SetupPage() {
                   {config.topic}
                 </p>
               </div>
-              <Button variant="ghost" size="sm" data-testid="topic-change" onClick={back} className="mt-4 shrink-0">
+              <Button variant="secondary" size="sm" data-testid="topic-change" onClick={back} className="mt-4 shrink-0">
                 Change
               </Button>
             </section>

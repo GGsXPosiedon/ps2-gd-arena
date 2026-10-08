@@ -3,6 +3,7 @@
 import { useId, useMemo } from "react";
 import { avatarSrc } from "@/components/Avatar";
 import { PERSONAS, speakerColor } from "@/lib/personas";
+import { speakerInk } from "../ink";
 import type { PersonaId, SpeakerId, SpeakerStat } from "@/lib/types";
 
 /**
@@ -137,7 +138,7 @@ export function FloorShareFigure({
               className={`fs-draw-${uid}`}
               style={{ animationDelay: `${i * 80}ms` }}
               fill="none"
-              stroke={speakerColor(o.s.speaker)}
+              stroke={speakerInk(o.s.speaker)}
               strokeWidth={isYou ? 11 : 6}
               strokeLinecap="butt"
             />
@@ -173,7 +174,7 @@ export function FloorShareFigure({
         const initial = isYou ? (studentName.trim() ? studentName.trim()[0].toUpperCase() : "You") : name(o.s.speaker)[0];
         return (
           <g key={o.s.speaker}>
-            <circle cx={p.x} cy={p.y} r="15" fill={speakerColor(o.s.speaker)} />
+            <circle cx={p.x} cy={p.y} r="15" fill={speakerColor(o.s.speaker)} stroke={isYou ? "var(--color-line-2)" : "none"} />
             {isYou && <circle cx={p.x} cy={p.y} r="19.5" fill="none" stroke="var(--color-fg)" strokeWidth="1" opacity="0.5" />}
             {isYou || o.s.speaker === "mod" ? (
               <text

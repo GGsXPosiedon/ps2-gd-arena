@@ -13,6 +13,7 @@
   --color-line: #1f1f1f; /* hairline borders */
   --color-line-2: #2e2e2e; /* input + emphasised borders */
   --color-fg: #ededed; /* primary text, primary button bg */
+  --color-fg-hover: #ffffff; /* primary button hover */
   --color-fg-2: #a1a1a1; /* secondary text */
   --color-fg-3: #8f8f8f; /* labels, timestamps */
   --color-blue: #0070f3; /* focus ring, links */
@@ -24,6 +25,26 @@
 
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+/* Light theme (Geist light). Toggled via <html data-theme="light">. */
+html[data-theme="light"] {
+  color-scheme: light;
+  --color-canvas: #ffffff;
+  --color-surface: #fafafa;
+  --color-surface-2: #f2f2f2;
+  --color-surface-3: #ebebeb;
+  --color-line: #eaeaea;
+  --color-line-2: #dcdcdc;
+  --color-fg: #171717;
+  --color-fg-hover: #383838;
+  --color-fg-2: #555555;
+  --color-fg-3: #737373;
+  --color-blue: #0070f3;
+  --color-blue-fg: #0060d9;
+  --color-ok: #2f9e44;
+  --color-danger: #d93036;
+  --color-warn: #b26a00;
 }
 
 html {

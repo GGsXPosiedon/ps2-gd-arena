@@ -303,7 +303,7 @@ function StatusLine(p: StageProps & { turn: "closing" | "hand" | null }) {
     message = "Captions only: no voices in this browser.";
   }
 
-  const color = tone === "ok" ? "text-[#8fd99b]" : tone === "warn" ? "text-[#ffcf70]" : "text-fg-3";
+  const color = tone === "ok" ? "text-ok" : tone === "warn" ? "text-warn" : "text-fg-3";
   return (
     <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center justify-center gap-3 text-center text-[13px]" role="status" aria-live="polite">
       {message && <span className={color}>{message}</span>}

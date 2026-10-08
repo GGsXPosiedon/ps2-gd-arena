@@ -1,6 +1,7 @@
 "use client";
 
 import { Avatar } from "@/components/Avatar";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import type { EngineState } from "@/lib/engine";
 import { speakerName } from "@/lib/personas";
 import type { RoomConfig } from "@/lib/types";
@@ -72,10 +73,11 @@ export function HostBar({ config, state, lobby }: { config: RoomConfig; state: E
           <span
             data-testid="timer"
             aria-live="off"
-            className={`font-mono text-base tabular-nums ${lowTime ? "text-[#ff6166]" : "text-fg"}`}
+            className={`font-mono text-base tabular-nums ${lowTime ? "text-danger" : "text-fg"}`}
           >
             {timer}
           </span>
+          <ThemeToggle className="ml-1 size-7 self-center" />
         </div>
       </div>
       <div className="absolute inset-x-0 -bottom-px h-px" aria-hidden="true">

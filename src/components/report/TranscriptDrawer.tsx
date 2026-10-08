@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { Badge, IconButton, Segmented } from "@/components/ui";
 import { buildsOnOthers, fmtTime } from "@/lib/metrics";
-import { speakerColor, speakerName } from "@/lib/personas";
+import { speakerName } from "@/lib/personas";
+import { speakerInk } from "./ink";
 import type { SessionRecord, Utterance } from "@/lib/types";
 
 type Filter = "all" | "me" | "interruptions";
@@ -84,7 +85,7 @@ export function TranscriptDrawer({
       <div
         aria-hidden
         onClick={onClose}
-        className={`fixed inset-0 z-40 bg-black/60 transition-opacity duration-300 sm:bg-black/30 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
+        className={`fixed inset-0 z-40 bg-canvas/70 transition-opacity duration-300 sm:bg-canvas/40 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
       />
       <aside
         role="dialog"
@@ -157,7 +158,7 @@ export function TranscriptDrawer({
                 <Avatar speaker={u.speaker} studentName={sn} size={28} />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] leading-5">
-                    <span className="font-medium" style={{ color: speakerColor(u.speaker) }}>
+                    <span className="font-medium" style={{ color: speakerInk(u.speaker) }}>
                       {speakerName(u.speaker, sn)}
                     </span>
                     <span className="font-mono text-xs text-fg-3 tabular-nums">{fmtTime(u.start)}</span>

@@ -2,7 +2,8 @@
 
 import { Card } from "@/components/ui";
 import { fmtTime, timelineSegments } from "@/lib/metrics";
-import { speakerColor, speakerName } from "@/lib/personas";
+import { speakerName } from "@/lib/personas";
+import { speakerInk } from "./ink";
 import type { Phase, SessionRecord, StudentMetrics } from "@/lib/types";
 
 const pctFmt = new Intl.NumberFormat("en", { style: "percent", maximumFractionDigits: 0 });
@@ -90,7 +91,7 @@ export function Timeline({
                     aria-label={`Go to ${name} at ${fmtTime(seg.start)}`}
                     title={fmtTime(seg.start)}
                     className="absolute inset-y-0 rounded-[2px] opacity-85 transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue"
-                    style={{ left: pct(seg.start), width: `max(3px, ${pct(seg.end - seg.start)})`, background: speakerColor(l.speaker) }}
+                    style={{ left: pct(seg.start), width: `max(3px, ${pct(seg.end - seg.start)})`, background: speakerInk(l.speaker) }}
                   />
                 ))}
                 {markers

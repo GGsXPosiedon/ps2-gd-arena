@@ -55,12 +55,11 @@ export function Avatar({
   const initials = !studentName.trim() ? "You" : name.slice(0, 1).toUpperCase();
   return (
     <span
-      className="inline-grid shrink-0 place-items-center rounded-full font-medium text-black select-none"
+      className="inline-grid shrink-0 place-items-center rounded-full bg-fg font-medium text-canvas select-none"
       style={{
         width: size,
         height: size,
         fontSize: Math.max(10, size * (initials.length > 1 ? 0.3 : 0.42)),
-        background: speakerColor(speaker),
         boxShadow: speaking ? "0 0 0 2px var(--color-canvas), 0 0 0 4px var(--color-ok)" : undefined,
       }}
       aria-hidden

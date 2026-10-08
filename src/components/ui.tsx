@@ -9,10 +9,10 @@ type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 const VARIANT: Record<Variant, string> = {
-  primary: "bg-fg text-canvas hover:bg-white",
+  primary: "bg-fg text-canvas hover:bg-fg-hover",
   secondary: "border border-line-2 bg-canvas text-fg hover:bg-surface-2",
   ghost: "text-fg-2 hover:bg-surface-2 hover:text-fg",
-  danger: "bg-danger text-white hover:bg-[#f2555a]",
+  danger: "bg-danger text-white hover:bg-danger/90", // white on red reads in both themes
 };
 const SIZE: Record<Size, string> = {
   sm: "h-8 px-3 text-[13px]",
@@ -54,9 +54,9 @@ export function IconButton({
       className={cx(
         "inline-grid size-11 place-items-center rounded-full border transition-colors disabled:pointer-events-none disabled:opacity-40",
         tone === "danger"
-          ? "border-transparent bg-danger text-white hover:bg-[#f2555a]"
+          ? "border-transparent bg-danger text-white hover:bg-danger/90"
           : active
-            ? "border-transparent bg-fg text-canvas hover:bg-white"
+            ? "border-transparent bg-fg text-canvas hover:bg-fg-hover"
             : "border-line-2 bg-surface text-fg hover:bg-surface-3",
         focusRing,
         className,
@@ -70,7 +70,7 @@ export function Input({ className, ...props }: ComponentProps<"input">) {
   return (
     <input
       className={cx(
-        "h-9 w-full min-w-0 rounded-md border border-line-2 bg-surface px-3 text-sm text-fg transition-colors placeholder:text-fg-3 hover:border-[#454545]",
+        "h-9 w-full min-w-0 rounded-md border border-line-2 bg-surface px-3 text-sm text-fg transition-colors placeholder:text-fg-3 hover:border-fg-3/60",
         focusRing,
         className,
       )}
@@ -156,7 +156,7 @@ export function Badge({ children, tone = "default", className }: { children: Rea
     default: "border-line-2 text-fg-2",
     ok: "border-ok/30 text-ok",
     warn: "border-warn/30 text-warn",
-    danger: "border-danger/40 text-[#ff6166]",
+    danger: "border-danger/40 text-danger",
     blue: "border-blue/40 text-blue-fg",
   };
   return (
@@ -194,9 +194,9 @@ export function Kbd({ children }: { children: ReactNode }) {
 export function Notice({ children, tone = "default", className }: { children: ReactNode; tone?: "default" | "warn" | "danger" | "ok"; className?: string }) {
   const tones = {
     default: "border-line-2 bg-surface text-fg-2",
-    warn: "border-warn/30 bg-warn/5 text-[#ffcf70]",
-    danger: "border-danger/40 bg-danger/5 text-[#ff8a8e]",
-    ok: "border-ok/30 bg-ok/5 text-[#8fd99b]",
+    warn: "border-warn/30 bg-warn/5 text-warn",
+    danger: "border-danger/40 bg-danger/5 text-danger",
+    ok: "border-ok/30 bg-ok/5 text-ok",
   };
   return (
     <div role="status" aria-live="polite" className={cx("rounded-md border px-3 py-2 text-[13px]", tones[tone], className)}>

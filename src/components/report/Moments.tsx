@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { Badge, Button, buttonClass, focusRing } from "@/components/ui";
 import { fmtTime } from "@/lib/metrics";
-import { speakerColor, speakerName } from "@/lib/personas";
+import { speakerName } from "@/lib/personas";
+import { speakerInk } from "./ink";
 import type { CriterionKey, FeedbackPoint, MissedOpening, ReportResult, SessionEvent, SessionRecord, SpeakerId, Utterance } from "@/lib/types";
 import { CRITERION } from "./labels";
 
@@ -279,9 +280,9 @@ function FeedbackMoment({
       </div>
       <p className="mt-2.5 text-sm leading-relaxed text-pretty text-fg">{point.point}</p>
 
-      <blockquote className="mt-3 border-l-2 pl-3" style={{ borderColor: speakerColor(speaker) }}>
+      <blockquote className="mt-3 border-l-2 pl-3" style={{ borderColor: speakerInk(speaker) }}>
         <div className="flex items-center gap-2 text-xs text-fg-3">
-          <span className="font-medium" style={{ color: speakerColor(speaker) }}>
+          <span className="font-medium" style={{ color: speakerInk(speaker) }}>
             {speakerName(speaker, sn)}
           </span>
           {utt && <span className="font-mono tabular-nums">{fmtTime(utt.start)}</span>}

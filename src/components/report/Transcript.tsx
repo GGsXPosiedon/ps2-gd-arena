@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { Badge, Segmented } from "@/components/ui";
 import { buildsOnOthers, fmtTime } from "@/lib/metrics";
-import { speakerColor, speakerName } from "@/lib/personas";
+import { speakerName } from "@/lib/personas";
+import { speakerInk } from "./ink";
 import type { SessionRecord, Utterance } from "@/lib/types";
 
 type Filter = "all" | "me" | "interruptions";
@@ -68,7 +69,7 @@ export function Transcript({ session, highlightId }: { session: SessionRecord; h
               <Avatar speaker={u.speaker} studentName={sn} size={28} />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] leading-5">
-                  <span className="font-medium" style={{ color: speakerColor(u.speaker) }}>
+                  <span className="font-medium" style={{ color: speakerInk(u.speaker) }}>
                     {speakerName(u.speaker, sn)}
                   </span>
                   <span className="font-mono text-xs text-fg-3 tabular-nums">{fmtTime(u.start)}</span>

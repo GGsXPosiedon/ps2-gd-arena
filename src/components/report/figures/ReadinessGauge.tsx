@@ -99,7 +99,7 @@ export function ReadinessGauge({ value, delta, className = "" }: { value: number
         {typeof delta === "number" && delta !== 0 && v !== null && (
           <span
             className={`mt-2 inline-flex h-5 items-center rounded-full border px-2 text-[11px] whitespace-nowrap tabular-nums ${
-              delta > 0 ? "border-ok/30 text-ok" : "border-danger/40 text-[#ff8a8e]"
+              delta > 0 ? "border-ok/30 text-ok" : "border-danger/40 text-danger"
             }`}
           >
             {delta > 0 ? "+" : "−"}

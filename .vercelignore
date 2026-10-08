@@ -1,0 +1,9 @@
+# Never upload local secrets or test artifacts with `vercel deploy`
+.env*
+!.env.example
+test-results
+playwright-report
+blob-report
+design
+AGENTS.md
+CLAUDE.md

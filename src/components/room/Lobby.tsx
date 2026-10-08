@@ -22,10 +22,10 @@ export function Lobby({
   const typed = inputMode === "typed";
   const meta = [
     `${config.personas.length} AI participants`,
-    config.e2e ? "Test mode" : `${config.durationMin} min`,
+    config.e2e ? null : `${config.durationMin} min`,
     config.language === "hinglish" ? "Hinglish" : "English",
     typed ? "Keyboard" : speakerMode ? "Mic, speaker mode" : "Mic",
-  ].join(" · ");
+  ].filter(Boolean).join(" · ");
 
   const how = typed
     ? "The moderator opens the floor. Type a point and press Enter whenever you want to speak."
