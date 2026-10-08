@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
+import { avatarSrc } from "@/components/Avatar";
 import { PERSONAS, speakerColor } from "@/lib/personas";
 import type { PersonaId, SpeakerId } from "@/lib/types";
 
@@ -21,6 +22,7 @@ export function TableFigure({
   labels?: boolean;
   className?: string;
 }) {
+  const seatClip = `tf-seat-${useId().replace(/:/g, "")}`;
   const W = 400;
   const H = 320;
   const cx = W / 2;
@@ -75,6 +77,9 @@ export function TableFigure({
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className={className} role="img" aria-label={`A round table with a moderator, ${personas.length} AI participants and you`}>
       <defs>
+        <clipPath id={seatClip}>
+          <circle r="15" />
+        </clipPath>
         <pattern id="tf-dots" width="16" height="16" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="1" fill="var(--color-line-2)" />
         </pattern>
@@ -123,16 +128,20 @@ export function TableFigure({
             ) : (
               <g>
                 <circle r="15" fill={speakerColor(id)} />
-                <text
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontSize={id === "you" ? 9 : 12}
-                  fontWeight="600"
-                  fill="#000"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
-                  {id === "you" ? (studentName.trim() ? studentName.trim()[0].toUpperCase() : "You") : PERSONAS[id].name[0]}
-                </text>
+                {id === "you" ? (
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={studentName.trim() ? 12 : 9}
+                    fontWeight="600"
+                    fill="#000"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    {studentName.trim() ? studentName.trim()[0].toUpperCase() : "You"}
+                  </text>
+                ) : (
+                  <image href={avatarSrc(id)} x="-15" y="-15" width="30" height="30" clipPath={`url(#${seatClip})`} />
+                )}
               </g>
             )}
             {labels && !(id === "you" && !studentName.trim()) && (

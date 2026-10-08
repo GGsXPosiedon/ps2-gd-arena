@@ -38,6 +38,10 @@ All audio handling runs in the browser; the server only holds API keys.
 
 Sessions are stored in your browser (localStorage; mic recording in IndexedDB).
 
+## Credits
+
+AI participant portraits: [Notionists](https://www.dicebear.com/styles/notionists/) by Zoish, via DiceBear (CC0 1.0). Regenerate with `bun run scripts/gen-avatars.mts`.
+
 ## Tests
 
 ```bash

@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useMemo } from "react";
+import { avatarSrc } from "@/components/Avatar";
 import { PERSONAS, speakerColor } from "@/lib/personas";
 import type { PersonaId, SpeakerId, SpeakerStat } from "@/lib/types";
 
@@ -20,6 +21,7 @@ export function FloorShareFigure({
   className?: string;
 }) {
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const seatClip = `${uid}-seat`;
   const W = 380;
   const H = 350;
   const cx = W / 2;
@@ -96,6 +98,9 @@ export function FloorShareFigure({
         .fs-draw-${uid} { stroke-dasharray: 1; animation: fs-draw-${uid} 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
       `}</style>
       <defs>
+        <clipPath id={seatClip}>
+          <circle r="15" />
+        </clipPath>
         <pattern id={`fs-dots-${uid}`} width="16" height="16" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="1" fill="var(--color-line-2)" />
         </pattern>
@@ -170,18 +175,24 @@ export function FloorShareFigure({
           <g key={o.s.speaker}>
             <circle cx={p.x} cy={p.y} r="15" fill={speakerColor(o.s.speaker)} />
             {isYou && <circle cx={p.x} cy={p.y} r="19.5" fill="none" stroke="var(--color-fg)" strokeWidth="1" opacity="0.5" />}
-            <text
-              x={p.x}
-              y={p.y}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fontSize={initial.length > 1 ? 9 : 12}
-              fontWeight="600"
-              fill="#000"
-              style={{ fontFamily: "var(--font-sans)" }}
-            >
-              {initial}
-            </text>
+            {isYou || o.s.speaker === "mod" ? (
+              <text
+                x={p.x}
+                y={p.y}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={initial.length > 1 ? 9 : 12}
+                fontWeight="600"
+                fill="#000"
+                style={{ fontFamily: "var(--font-sans)" }}
+              >
+                {initial}
+              </text>
+            ) : (
+              <g transform={`translate(${p.x} ${p.y})`}>
+                <image href={avatarSrc(o.s.speaker as PersonaId)} x="-15" y="-15" width="30" height="30" clipPath={`url(#${seatClip})`} />
+              </g>
+            )}
             <text
               x={side === "left" ? p.x + 15 : side === "right" ? p.x - 15 : p.x}
               y={ly}
