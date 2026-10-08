@@ -16,7 +16,7 @@ interface Pool {
 
 const EN: Record<PersonaId, Pool> = {
   arjun: {
-    leads: ["{last}, with respect, that misses the bigger picture.", "No, {last}, that's too cautious.", "Look, {last}, let's be practical here.", "I'll be direct, {last}."],
+    leads: ["Let me be very clear, {last}.", "No, {last}, that's too cautious.", "At the end of the day, {last},", "{last}, with respect, that misses the bigger picture."],
     points: [
       "The trend is obvious and we can't keep debating the basics.",
       "Execution is everything, and that's exactly where my point stands.",
@@ -29,7 +29,7 @@ const EN: Record<PersonaId, Pool> = {
     closing: ["To conclude, I stand firmly by my view: the upside is far bigger than the risks, and we should act now."],
   },
   priya: {
-    leads: ["{last}, do we have evidence for that?", "That's a sweeping claim, {last}.", "I'd push back a little, {last}.", "Adding a number to what {last} said:"],
+    leads: ["What's the source on that, {last}?", "That's a sweeping claim, {last}.", "If you look at the numbers, {last},", "Adding a number to what {last} said:"],
     points: [
       "One survey I read found barely a third of firms saw lasting gains.",
       "Around 60 companies joined the pilots abroad and most kept the change, but almost all were office-based.",
@@ -69,7 +69,7 @@ const EN: Record<PersonaId, Pool> = {
     closing: ["To sum up, I think it depends on the people involved, and we should learn from real experiences."],
   },
   ananya: {
-    leads: ["Let me play devil's advocate, {last}.", "Everyone seems to be agreeing too quickly.", "{last}, I'm not convinced."],
+    leads: ["Let me push back on that, {last}.", "Everyone seems to be agreeing too quickly.", "{last}, that works only if everything goes right."],
     points: [
       "What if the opposite is true and this makes things worse?",
       "Who actually loses if we go down this path?",
@@ -80,7 +80,7 @@ const EN: Record<PersonaId, Pool> = {
     closing: ["I'll close by saying the popular view has real blind spots, and we should test it before we celebrate it."],
   },
   kabir: {
-    leads: ["I think both sides have a point.", "I agree with {last}, and also with the earlier point.", "{last} makes sense to me."],
+    leads: ["Both sides have a point, {last}.", "Building on what everyone said,", "{last} makes sense to me, and so does the earlier point."],
     points: [
       "Maybe the middle path is best: try it in some places and keep what works.",
       "The risks are real, but so are the benefits.",

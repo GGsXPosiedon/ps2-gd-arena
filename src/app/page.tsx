@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { AsciiField } from "@/components/AsciiField";
-import { Avatar } from "@/components/Avatar";
+import { AiTag, Avatar } from "@/components/Avatar";
 import { MicTest, type InputChoice } from "@/components/MicTest";
 import { TableFigure } from "@/components/TableFigure";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -490,7 +490,7 @@ export default function SetupPage() {
         // No transform animation on <main> or the settings panel: it would trap the fixed mobile button.
         <main
           id="main"
-          className="mx-auto grid max-w-5xl items-center gap-8 px-4 pt-6 pb-36 sm:px-6 lg:min-h-[calc(100dvh-4rem-1px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-12 lg:py-6"
+          className="mx-auto grid max-w-6xl items-center gap-8 px-4 pt-6 pb-36 sm:px-6 lg:min-h-[calc(100dvh-4rem-1px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-12 lg:py-6"
         >
           {/* left: topic, table, panel */}
           <div className="min-w-0">
@@ -515,7 +515,7 @@ export default function SetupPage() {
             <TableFigure
               personas={config.personas}
               studentName={config.studentName}
-              className="animate-rise mx-auto mt-2 w-full max-w-[22rem] lg:max-w-[25rem]"
+              className="animate-rise mx-auto mt-1 w-full max-w-[15rem] lg:max-w-[16.5rem]"
             />
 
             <section aria-labelledby="panel-heading" className="animate-rise mt-2" style={{ animationDelay: "80ms" }}>
@@ -525,39 +525,53 @@ export default function SetupPage() {
                 </h2>
                 <span className="text-[13px] text-fg-3 tabular-nums">{panelCount} of 3–5 picked</span>
               </div>
-              <ul className="mt-2 grid grid-cols-3 sm:grid-cols-6">
+              <ul className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {PERSONA_ORDER.map((id) => {
                   const p = PERSONAS[id];
                   const on = config.personas.includes(id);
                   const locked = (on && panelCount <= MIN_PANEL) || (!on && panelCount >= MAX_PANEL);
                   return (
-                    <li key={id} className="flex justify-center">
+                    <li key={id} className="min-w-0">
                       <button
                         type="button"
                         data-testid={`persona-card-${id}`}
                         aria-pressed={on}
                         aria-disabled={locked}
-                        title={`${p.archetype}: ${p.blurb}`}
+                        title={locked ? (on ? "At least 3 AI participants: add someone before removing" : "At most 5 AI participants: remove someone first") : undefined}
                         onClick={() => !locked && togglePersona(id)}
-                        className={`group flex w-full flex-col items-center gap-1 rounded-lg py-1.5 transition-colors hover:bg-surface-2 ${focusRing} ${
-                          locked ? "cursor-not-allowed" : ""
-                        }`}
+                        className={`relative flex h-full w-full flex-col gap-1.5 rounded-xl border p-2.5 text-left transition-colors ${focusRing} ${
+                          on ? "border-fg bg-surface-2" : "border-line hover:border-line-2"
+                        } ${locked ? "cursor-not-allowed" : ""}`}
                       >
-                        <span
-                          className={`rounded-full p-0.5 ring-1 transition ${on ? "ring-fg" : "opacity-40 ring-transparent group-hover:opacity-70"}`}
-                        >
-                          <Avatar speaker={id} size={40} />
+                        <span className={`flex min-w-0 items-center gap-2 pr-5 transition-opacity ${on ? "" : "opacity-60"}`}>
+                          <Avatar speaker={id} size={30} />
+                          <span className="min-w-0">
+                            <span className="flex items-center text-[13px] leading-tight font-medium text-fg">
+                              <span className="truncate">{p.name}</span>
+                              <AiTag />
+                            </span>
+                            <span className="block truncate text-[11px] leading-snug text-fg-3">{p.archetype}</span>
+                          </span>
                         </span>
-                        <span className={`text-xs ${on ? "text-fg" : "text-fg-3"}`}>{p.name}</span>
-                        <span className="sr-only">
-                          , {p.archetype}. {p.blurb}.
+                        <span className={`line-clamp-3 text-[12px] leading-snug text-fg-2 transition-opacity ${on ? "" : "opacity-70"}`}>{p.blurb}</span>
+                        <span
+                          aria-hidden="true"
+                          className={`absolute top-2 right-2 grid size-4 place-items-center rounded-full border transition-colors ${
+                            on ? "border-fg bg-fg text-canvas" : "border-line-2"
+                          }`}
+                        >
+                          {on && (
+                            <svg width="9" height="9" viewBox="0 0 10 10">
+                              <path d="M2 5.2 4.1 7.3 8 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          )}
                         </span>
                       </button>
                     </li>
                   );
                 })}
               </ul>
-              <p className="mt-1 text-center text-xs text-fg-3" aria-live="polite">
+              <p className="mt-1.5 text-xs text-fg-3" aria-live="polite">
                 {panelCount <= MIN_PANEL
                   ? "At least 3 AI participants. Add someone before removing another."
                   : panelCount >= MAX_PANEL
