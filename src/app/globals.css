@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+/*
+  Vercel / Geist dark palette.
+  Semantic tokens (use these): bg-canvas, bg-surface, bg-surface-2, bg-surface-3, border-line, border-line-2,
+  text-fg, text-fg-2, text-fg-3, blue / blue-fg, ok, danger, warn.
+*/
+@theme {
+  --color-canvas: #000000; /* page */
+  --color-surface: #0a0a0a; /* cards, sidebars, inputs */
+  --color-surface-2: #111111; /* hover */
+  --color-surface-3: #1a1a1a; /* pressed / selected / secondary buttons */
+  --color-line: #1f1f1f; /* hairline borders */
+  --color-line-2: #2e2e2e; /* input + emphasised borders */
+  --color-fg: #ededed; /* primary text, primary button bg */
+  --color-fg-2: #a1a1a1; /* secondary text */
+  --color-fg-3: #8f8f8f; /* labels, timestamps */
+  --color-blue: #0070f3; /* focus ring, links */
+  --color-blue-fg: #52a8ff; /* blue text on dark */
+  --color-ok: #62c073; /* speaking ring, success */
+  --color-danger: #e5484d;
+  --color-warn: #ffb224;
+
+  /* Legacy aliases (Discord-era names) mapped onto the Vercel palette. Migrate to the semantic tokens above. */
+  --color-d-950: #000000;
+  --color-d-900: #0a0a0a;
+  --color-d-800: #0a0a0a;
+  --color-d-700: #000000;
+  --color-d-600: #1a1a1a;
+  --color-d-500: #262626;
+  --color-d-400: #3d3d3d;
+  --color-tx: #ededed;
+  --color-tx-hi: #fafafa;
+  --color-tx-lo: #a1a1a1;
+  --color-tx-faint: #8f8f8f;
+  --color-blurple: #0070f3;
+  --color-blurple-hover: #0060d1;
+
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html {
+  color-scheme: dark;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (pointer: fine) {
+  html {
+    overscroll-behavior: none;
+  }
+}
+
+html,
+body {
+  background: var(--color-canvas);
+  color: var(--color-fg);
+}
+
+body {
+  font-family: var(--font-sans);
+  touch-action: manipulation;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-blue) 45%, transparent);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-2) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
