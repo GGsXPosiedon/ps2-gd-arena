@@ -19,17 +19,15 @@ function Band({ value, min, max, okFrom, okTo }: { value: number; min: number; m
 function Cell({ label, value, sub, ok, children }: { label: string; value: string; sub?: string; ok?: boolean; children?: React.ReactNode }) {
   return (
     <div className="min-w-0 bg-surface p-4">
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-[13px] text-fg-2">{label}</span>
-        {ok !== undefined && (
-          <span className={`inline-flex shrink-0 items-center gap-1.5 text-xs ${ok ? "text-ok" : "text-warn"}`}>
-            <span aria-hidden className={`size-1.5 rounded-full ${ok ? "bg-ok" : "bg-warn"}`} />
-            {ok ? "Healthy" : "Needs Work"}
-          </span>
-        )}
-      </div>
-      <div className="mt-1.5 text-lg font-semibold tracking-tight text-fg tabular-nums">{value}</div>
-      {sub && <div className="mt-0.5 truncate text-xs text-fg-3">{sub}</div>}
+      <div className="text-[13px] text-pretty text-fg-2">{label}</div>
+      <div className="mt-1.5 text-lg font-semibold tracking-tight text-pretty text-fg tabular-nums">{value}</div>
+      {ok !== undefined && (
+        <span className={`mt-1 inline-flex items-center gap-1.5 text-xs ${ok ? "text-ok" : "text-warn"}`}>
+          <span aria-hidden className={`size-1.5 rounded-full ${ok ? "bg-ok" : "bg-warn"}`} />
+          {ok ? "Healthy" : "Needs work"}
+        </span>
+      )}
+      {sub && <div className="mt-0.5 text-xs text-pretty text-fg-3">{sub}</div>}
       {children}
     </div>
   );
@@ -43,12 +41,12 @@ export function MetricTiles({ m, discussionMs }: { m: StudentMetrics; discussion
   const spoke = m.turns > 0;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-line">
+    <div className="@container overflow-hidden rounded-2xl border border-line">
       <div className="border-b border-line bg-surface px-4 py-3">
         <h3 className="text-sm font-medium text-fg">Your Numbers</h3>
         <p className="mt-0.5 text-xs text-fg-3">The shaded band on each bar is the healthy range.</p>
       </div>
-      <div className="grid grid-cols-1 gap-px bg-line sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-px bg-line @md:grid-cols-2 @4xl:grid-cols-4">
         <Cell
           label="Talk-Time Share"
           value={pctFmt.format(m.share)}

@@ -15,7 +15,7 @@ import { TranscriptDrawer } from "@/components/report/TranscriptDrawer";
 import { useReplay } from "@/components/report/useReplay";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Sparkline } from "@/components/Sparkline";
-import { Badge, Button, buttonClass, Card, Notice, Spinner } from "@/components/ui";
+import { Badge, Button, buttonClass, Card, Notice, SectionTitle, Spinner } from "@/components/ui";
 import { SAMPLE_SESSION } from "@/lib/fixtures/sampleSession";
 import { computeMetrics, findOpeningCandidates, fmtTime } from "@/lib/metrics";
 import { PERSONAS, speakerName } from "@/lib/personas";
@@ -61,12 +61,11 @@ const ArrowIcon = () => (
   </svg>
 );
 
+/** Report section heading: the shared SectionTitle plus a one-line hint. */
 function SectionHeading({ id, title, hint }: { id: string; title: string; hint?: string }) {
   return (
     <div className="mb-5">
-      <h2 id={`${id}-heading`} className="text-lg font-semibold tracking-tight text-balance text-fg">
-        {title}
-      </h2>
+      <SectionTitle id={`${id}-heading`}>{title}</SectionTitle>
       {hint && <p className="mt-1 text-[13px] text-pretty text-fg-2">{hint}</p>}
     </div>
   );
@@ -202,13 +201,19 @@ export default function ReportView({ id }: { id: string }) {
       <div className="flex min-h-screen flex-col">
         <SiteHeader wide />
         <main id="main" className="grid flex-1 place-items-center p-6">
-          <Card className="max-w-sm p-6 text-center">
-            <h1 className="text-base font-semibold text-fg">Report Not Found</h1>
-            <p className="mt-2 text-[13px] text-pretty text-fg-2">Reports are saved only in the browser that ran the discussion.</p>
-            <Link href="/" className={buttonClass("primary", "md", "mt-5")}>
-              Start a Discussion
-            </Link>
-          </Card>
+          <div className="max-w-md text-center">
+            <p className="font-mono text-xs tracking-wide text-fg-3 uppercase">Report</p>
+            <h1 className="font-display mt-2 text-4xl leading-tight text-balance text-fg">This report isn&apos;t here</h1>
+            <p className="mt-3 text-[13px] text-pretty text-fg-2">Reports are saved only in the browser that ran the discussion.</p>
+            <div className="mt-6 flex flex-col items-center justify-center gap-2 sm:flex-row">
+              <Link href="/" className={buttonClass("primary", "lg")}>
+                Start a New Discussion
+              </Link>
+              <Link href="/?step=table" className={buttonClass("ghost", "lg")}>
+                Use Last Setup
+              </Link>
+            </div>
+          </div>
         </main>
       </div>
     );
@@ -270,11 +275,13 @@ export default function ReportView({ id }: { id: string }) {
         {/* ================= LEFT (visual): score, figures, actions ================= */}
         <aside
           aria-label="Your score and next steps"
-          aria-live="polite"
           aria-busy={pending}
           className="border-b border-line bg-surface lg:sticky lg:top-16 lg:h-[calc(100dvh-4rem)] lg:overflow-y-auto lg:overscroll-contain lg:border-r lg:border-b-0"
         >
           <div className="mx-auto flex min-h-full w-full max-w-lg flex-col justify-center gap-6 px-6 py-8 lg:py-10">
+            <p className="sr-only" aria-live="polite">
+              {report && spoke ? `Readiness ${report.readiness} out of 100. Scoring complete.` : ""}
+            </p>
             <div className="animate-rise">
               {spoke ? (
                 <>
@@ -317,9 +324,11 @@ export default function ReportView({ id }: { id: string }) {
                 New Discussion
               </Link>
               <div className="flex justify-center gap-1 pt-1">
-                <Button variant="ghost" size="sm" onClick={() => setDrawerOpen(true)}>
-                  Transcript
-                </Button>
+                <span className="hidden lg:contents">
+                  <Button variant="ghost" size="sm" onClick={() => setDrawerOpen(true)}>
+                    Transcript
+                  </Button>
+                </span>
                 <Button variant="ghost" size="sm" onClick={() => exportTranscript(session)}>
                   Export Transcript
                 </Button>
@@ -340,13 +349,19 @@ export default function ReportView({ id }: { id: string }) {
                 <p className="font-mono text-xs tracking-wide text-fg-3 uppercase">Report</p>
                 <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-fg-2">
                   {isSample && <Badge tone="blue">Sample</Badge>}
-                  <span>{dateFmt.format(new Date(session.createdAt))}</span>
-                  <span aria-hidden>·</span>
-                  <span className="tabular-nums">{durationLabel(discussionMs)} discussion</span>
-                  <span aria-hidden>·</span>
-                  <span>{cfg.personas.length} AI participants</span>
-                  <span aria-hidden>·</span>
-                  <span>{cfg.language === "hinglish" ? "Hinglish" : "English"}</span>
+                  <span className="whitespace-nowrap">
+                    {dateFmt.format(new Date(session.createdAt))}
+                    <span aria-hidden className="ml-2">·</span>
+                  </span>
+                  <span className="whitespace-nowrap tabular-nums">
+                    {durationLabel(discussionMs)} discussion
+                    <span aria-hidden className="ml-2">·</span>
+                  </span>
+                  <span className="whitespace-nowrap">
+                    {cfg.personas.length} AI participants
+                    <span aria-hidden className="ml-2">·</span>
+                  </span>
+                  <span className="whitespace-nowrap">{cfg.language === "hinglish" ? "Hinglish" : "English"}</span>
                   {session.inputMode === "typed" && <Badge>Typed Session</Badge>}
                 </div>
                 <h1 className="font-display mt-3 text-4xl leading-[1.05] text-balance break-words text-fg sm:text-5xl">{cfg.topic}</h1>

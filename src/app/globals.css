@@ -5,6 +5,12 @@
   Semantic tokens (use these): bg-canvas, bg-surface, bg-surface-2, bg-surface-3, border-line, border-line-2,
   text-fg, text-fg-2, text-fg-3, blue / blue-fg, ok, danger, warn.
 */
+/*
+  Type rule (all pages):
+  - Page-level / hero headings and section titles: serif display (`font-display`), via <SectionTitle> in ui.tsx,
+    optionally with a small mono uppercase eyebrow.
+  - Card-level headings (h3), labels and body: Geist sans. Mono for numbers, timers and eyebrows.
+*/
 @theme {
   --color-canvas: #000000; /* page */
   --color-surface: #0a0a0a; /* cards, sidebars, inputs */
@@ -40,12 +46,12 @@ html[data-theme="light"] {
   --color-fg: #171717;
   --color-fg-hover: #383838;
   --color-fg-2: #555555;
-  --color-fg-3: #737373;
+  --color-fg-3: #6b6b6b; /* ≥ 4.5:1 on surface-2 */
   --color-blue: #0070f3;
   --color-blue-fg: #0060d9;
-  --color-ok: #2f9e44;
-  --color-danger: #d93036;
-  --color-warn: #b26a00;
+  --color-ok: #237a36; /* AA as text on light surfaces */
+  --color-danger: #c92a30;
+  --color-warn: #9a5c00;
 }
 
 html {

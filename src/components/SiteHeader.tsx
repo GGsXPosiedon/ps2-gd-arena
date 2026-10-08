@@ -21,7 +21,7 @@ export function Wordmark({ size = "md" }: { size?: "md" | "lg" }) {
 /** Shared top bar: the wordmark always links home; `children` go on the right, before the theme toggle. */
 export function SiteHeader({ children, wide = false }: { children?: ReactNode; wide?: boolean }) {
   return (
-    <header className="sticky top-0 z-20 border-b border-line bg-canvas/80 backdrop-blur">
+    <header className={`sticky top-0 z-20 border-b border-line ${wide ? "bg-canvas" : "bg-canvas/80 backdrop-blur"}`}>
       <div className={`mx-auto flex h-16 items-center justify-between gap-4 px-5 sm:px-8 ${wide ? "" : "max-w-6xl"}`}>
         <Link href="/" className={`rounded-md py-1 ${focusRing}`} aria-label="GD Arena home">
           <Wordmark />

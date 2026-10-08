@@ -207,7 +207,7 @@ export function TableFigure({
               </g>
             )}
 
-            {labels && !(id === "you" && !studentName.trim() && !isLive) && (
+            {labels && !(id === "you" && !studentName.trim() && !(isLive && (cut || failed))) && (
               <text
                 y={labelBelow ? R + (isLive ? 21 : 17) : -(R + (isLive ? 12 : 9))}
                 textAnchor="middle"

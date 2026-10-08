@@ -52,13 +52,14 @@ export function HostBar({ config, state, lobby }: { config: RoomConfig; state: E
       <div className="flex items-center gap-4 px-5 py-3 sm:px-8">
         <Avatar speaker="mod" size={40} speaking={!!modLive} />
         <div className="min-w-0 flex-1">
-          <p className="font-mono text-[11px] tracking-wide text-fg-3 uppercase">
+          <p className="hidden font-mono text-[11px] tracking-wide text-fg-3 uppercase sm:block">
             Moderator <span className="text-line-2">·</span> Group discussion
           </p>
-          <h1 className="font-display truncate text-[22px] leading-tight text-fg sm:text-[26px]" title={config.topic}>
+          {/* Two lines on phones so the whole motion stays readable; one line with an ellipsis on wider screens. */}
+          <h1 className="font-display line-clamp-2 text-[20px] leading-tight text-balance text-fg sm:line-clamp-1 sm:text-[26px]" title={config.topic}>
             {config.topic}
           </h1>
-          <p className="mt-0.5 line-clamp-1 text-[13px] leading-snug" aria-live="polite">
+          <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug sm:line-clamp-1" aria-live="polite">
             {modLive ? (
               <>
                 <span className="text-fg">{modLive.text.slice(0, modLive.shown)}</span>

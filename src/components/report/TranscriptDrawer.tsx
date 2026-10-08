@@ -98,9 +98,11 @@ export function TranscriptDrawer({
         }`}
       >
         <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-          <div className="flex items-baseline gap-2">
-            <h2 className="text-sm font-semibold text-fg">Transcript</h2>
-            <span className="text-xs text-fg-3 tabular-nums">{session.utterances.length} lines</span>
+          <div className="min-w-0">
+            <p className="font-mono text-xs tracking-wide text-fg-3 uppercase">
+              Transcript <span className="tabular-nums">· {session.utterances.length} lines</span>
+            </p>
+            <h2 className="font-display truncate text-2xl leading-tight text-fg">Full transcript</h2>
           </div>
           <IconButton ref={closeRef} aria-label="Close transcript" onClick={onClose} className="size-8">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">

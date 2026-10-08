@@ -34,11 +34,13 @@ export function RoomView({
   config,
   inputMode,
   autoStarted = false,
+  onInputModeChange,
 }: {
   engine: GDEngine;
   config: RoomConfig;
   inputMode: "voice" | "typed";
   autoStarted?: boolean;
+  onInputModeChange?: (mode: "voice" | "typed") => void;
 }) {
   const router = useRouter();
   const state = useSyncExternalStore(engine.subscribe, engine.getState, engine.getState);
@@ -160,6 +162,7 @@ export function RoomView({
             speakerMode={speakerMode}
             starting={state.status === "starting"}
             onJoin={() => engine.start()}
+            onInputModeChange={onInputModeChange}
           />
         </main>
       </div>
@@ -195,6 +198,10 @@ export function RoomView({
           }}
           onSpeakerMode={() => engine.setSpeakerMode(true)}
           onFinishNow={() => engine.finishNow()}
+          onFocusComposer={() => {
+            if (!chatOpen) setChatPref(true);
+            requestAnimationFrame(() => composerRef.current?.focus());
+          }}
           onInterrupt={() => {
             engine.interrupt();
             if (engine.getState().inputMode === "typed") composerRef.current?.focus();

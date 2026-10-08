@@ -31,6 +31,7 @@ export interface StageProps {
   onSpeakerMode: () => void;
   onInterrupt: () => void;
   onFinishNow?: () => void;
+  onFocusComposer?: () => void; // typing mode: jump to the message box
 }
 
 export function Stage(p: StageProps) {
@@ -42,14 +43,18 @@ export function Stage(p: StageProps) {
   const aiSpeaking = state.live && state.live.speaker !== "mod" ? state.live.speaker : null;
 
   return (
-    <section id="main" className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-canvas" aria-label="Discussion">
-      <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
+    <section
+      id="main"
+      className={`relative flex min-h-0 min-w-0 flex-1 flex-col bg-canvas ${p.mobileTranscript ? "" : "max-sm:justify-center"}`}
+      aria-label="Discussion"
+    >
+      <div className={`relative min-h-0 overflow-y-auto overscroll-contain ${p.mobileTranscript ? "flex-1" : "flex-1 max-sm:flex-none"}`}>
         {p.mobileTranscript ? (
           <div className="flex h-full flex-col">{p.mobileTranscript}</div>
         ) : (
           // The table is the centrepiece: who is speaking, who is about to, who got cut off, your raised hand.
           // The moderator is the host bar above, not a seat.
-          <div className="flex h-full min-h-[260px] items-center justify-center px-4 pt-3 pb-1 sm:px-8">
+          <div className="flex items-center justify-center px-4 pt-3 pb-1 sm:h-full sm:min-h-[260px] sm:px-8">
             <TableFigure
               personas={config.personas}
               studentName={config.studentName}
@@ -76,16 +81,17 @@ export function Stage(p: StageProps) {
       )}
 
       {!lobby && (
-        <div className="flex shrink-0 items-start justify-center gap-3 px-4 pt-3 pb-5 sm:gap-5">
-          <Control label={typed ? "Keyboard" : state.muted ? "Unmute" : "Mic"}>
+        <div className="flex shrink-0 items-start justify-center gap-3 px-4 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:gap-5">
+          <Control label={typed ? "Typing" : state.muted ? "Unmute" : "Mic"}>
             <IconButton
               data-testid="mute-toggle"
-              onClick={p.onToggleMute}
-              disabled={typed || !running}
-              aria-pressed={state.muted}
-              aria-label={typed ? "Typing mode (no microphone)" : state.muted ? "Unmute (M)" : "Mute (M)"}
-              title={typed ? "Typing mode" : state.muted ? "Unmute (M)" : "Mute (M)"}
-              active={state.muted}
+              onClick={typed ? p.onFocusComposer : p.onToggleMute}
+              disabled={!running}
+              aria-pressed={typed ? undefined : state.muted}
+              aria-label={typed ? "Typing mode: go to the message box" : state.muted ? "Unmute (M)" : "Mute (M)"}
+              aria-describedby={typed ? "typing-hint" : undefined}
+              title={typed ? "Type your point in the message box" : state.muted ? "Unmute (M)" : "Mute (M)"}
+              active={!typed && state.muted}
             >
               {typed ? <KeyboardIcon /> : state.muted ? <MicOffIcon /> : <MicIcon />}
             </IconButton>
@@ -153,7 +159,7 @@ export function Stage(p: StageProps) {
       )}
       {state.pauseReason === "user" && (
         <Overlay testId="paused-overlay" role="dialog" label="Paused">
-          <div className="text-sm font-medium text-fg">Paused</div>
+          <div className="font-display text-2xl text-fg">Paused</div>
           <div className="mt-1 text-[13px] text-fg-2">The timer is stopped. Resume when you’re ready.</div>
           <Button variant="primary" className="mt-4" data-testid="resume" onClick={p.onTogglePause}>
             Resume
@@ -381,45 +387,76 @@ function MoreMenu({
 }) {
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const items = () => [...(boxRef.current?.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]:not(:disabled)') ?? [])];
+  const close = (restoreFocus = true) => {
+    setOpen(false);
+    if (restoreFocus) triggerRef.current?.focus();
+  };
   useEffect(() => {
     if (!open) return;
+    items()[0]?.focus(); // menu pattern: focus the first item on open
     const onDown = (e: PointerEvent) => {
       if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("pointerdown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
+    return () => document.removeEventListener("pointerdown", onDown);
   }, [open]);
+  const onMenuKey = (e: React.KeyboardEvent) => {
+    const list = items();
+    const i = list.indexOf(document.activeElement as HTMLButtonElement);
+    const go = (n: number) => {
+      e.preventDefault();
+      list[(n + list.length) % list.length]?.focus();
+    };
+    if (e.key === "ArrowDown") go(i + 1);
+    else if (e.key === "ArrowUp") go(i - 1);
+    else if (e.key === "Home") go(0);
+    else if (e.key === "End") go(list.length - 1);
+    else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    } else if (e.key === "Tab") close(false);
+  };
   const item = `flex w-full items-center justify-between gap-6 rounded-md px-3 py-2 text-left text-[13px] text-fg transition-colors hover:bg-surface-3 disabled:opacity-50 ${focusRing}`;
   return (
     <div ref={boxRef} className="relative">
       <IconButton
+        ref={triggerRef}
         data-testid="more-controls"
         onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
         aria-label="More controls"
         title="More"
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls="more-menu"
       >
         <MoreIcon />
       </IconButton>
       {open && (
         <div
+          id="more-menu"
           role="menu"
+          aria-label="More controls"
+          onKeyDown={onMenuKey}
           className="absolute bottom-full left-1/2 z-20 mb-3 w-48 -translate-x-1/2 rounded-2xl border border-line-2 bg-surface p-1 shadow-lg"
         >
           <button
             type="button"
             role="menuitem"
+            tabIndex={-1}
             data-testid="pause-toggle"
             disabled={!canPause && !paused}
             onClick={() => {
               onTogglePause();
-              setOpen(false);
+              close();
             }}
             className={item}
           >
@@ -429,6 +466,7 @@ function MoreMenu({
           <button
             type="button"
             role="menuitemcheckbox"
+            tabIndex={-1}
             data-testid="cc-toggle"
             aria-checked={captionsOn}
             onClick={onToggleCaptions}

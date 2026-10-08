@@ -50,16 +50,23 @@ export function Timeline({
       <div data-testid="timeline-phases" className="mb-3 grid grid-cols-[84px_1fr_40px] items-center gap-3 border-b border-line pb-3">
         <span className="truncate text-[13px] text-fg-3">Moderator</span>
         <div className="relative h-5 overflow-hidden rounded-sm bg-surface">
-          {bands.map((b) => (
-            <div
-              key={`${b.phase}-${b.start}`}
-              className={`absolute inset-y-0 flex items-center border-r border-canvas px-1.5 ${b.phase === "discussion" ? "bg-surface-3" : "bg-surface-2"}`}
-              style={{ left: pct(b.start), width: pct(b.end - b.start) }}
-              title={`${PHASE_LABEL[b.phase]} · ${fmtTime(b.start)}`}
-            >
-              <span className="truncate text-[11px] text-fg-3">{PHASE_LABEL[b.phase]}</span>
-            </div>
-          ))}
+          {bands.map((b, i) => {
+            // Narrow bands keep only their tooltip; the last label hugs the right edge.
+            const wide = (b.end - b.start) / Math.max(1, total) >= 0.14;
+            const last = i === bands.length - 1;
+            return (
+              <div
+                key={`${b.phase}-${b.start}`}
+                className={`absolute inset-y-0 flex items-center border-r border-canvas px-1.5 ${last ? "justify-end" : ""} ${
+                  b.phase === "discussion" ? "bg-surface-3" : "bg-surface-2"
+                }`}
+                style={{ left: pct(b.start), width: pct(b.end - b.start) }}
+                title={`${PHASE_LABEL[b.phase]} · ${fmtTime(b.start)}`}
+              >
+                {wide && <span className="truncate text-[11px] text-fg-3">{PHASE_LABEL[b.phase]}</span>}
+              </div>
+            );
+          })}
           {modLane?.segments.map((seg) => (
             <button
               key={seg.id}
@@ -113,24 +120,33 @@ export function Timeline({
         })}
         <div className="grid grid-cols-[84px_1fr_40px] gap-3 font-mono text-[11px] text-fg-3 tabular-nums">
           <span />
-          <div className="flex justify-between">
+          <div className="flex justify-between gap-2">
             {[0, 0.25, 0.5, 0.75, 1].map((f) => (
-              <span key={f}>{fmtTime(total * f)}</span>
+              <span key={f} className={f === 0.25 || f === 0.75 ? "hidden sm:inline" : undefined}>
+                {fmtTime(total * f)}
+              </span>
             ))}
           </div>
           <span />
         </div>
       </div>
-      <p className="mt-4 flex flex-wrap items-center gap-x-1.5 text-[13px] text-fg-3">
-        Fair share: {pctFmt.format(metrics.fairShare)} each.
+      <ul className="mt-4 flex flex-wrap gap-x-5 gap-y-1.5 text-[13px] text-fg-3">
+        <li className="flex items-center gap-2">
+          <span aria-hidden className="inline-block w-4 border-t border-dashed border-fg-3" />
+          Fair share: {pctFmt.format(metrics.fairShare)} each
+        </li>
         {markers.length > 0 && (
-          <>
+          <li className="flex items-center gap-2">
             <span aria-hidden className="inline-block h-3 w-0.5 rounded-full bg-danger" />
-            Red marks show where someone was cut off.
-          </>
-        )}{" "}
-        Ticks on the moderator track mark when the moderator stepped in. Select a block or tick to see the line.
-      </p>
+            Someone was cut off
+          </li>
+        )}
+        <li className="flex items-center gap-2">
+          <span aria-hidden className="inline-block h-3 w-0.5 rounded-full bg-fg-3" />
+          Moderator stepped in
+        </li>
+      </ul>
+      <p className="mt-1.5 text-xs text-fg-3">Select a block or tick to see the line.</p>
     </Card>
   );
 }

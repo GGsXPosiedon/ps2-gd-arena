@@ -29,7 +29,7 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
       aria-label={`Switch to ${next} theme`}
       title={`Switch to ${next} theme`}
       data-testid="theme-toggle"
-      className={`grid size-8 place-items-center rounded-md text-fg-2 transition-colors hover:bg-surface-2 hover:text-fg ${focusRing} ${className}`}
+      className={`grid size-10 place-items-center rounded-md sm:size-8 text-fg-2 transition-colors hover:bg-surface-2 hover:text-fg ${focusRing} ${className}`}
     >
       {theme === "dark" ? (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">

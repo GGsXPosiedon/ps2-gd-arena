@@ -9,7 +9,7 @@ import { AiTag, Avatar } from "@/components/Avatar";
 import { MicTest, type InputChoice } from "@/components/MicTest";
 import { TableFigure } from "@/components/TableFigure";
 import { SiteHeader } from "@/components/SiteHeader";
-import { Badge, Button, Input, Kbd, Segmented, Switch, focusRing } from "@/components/ui";
+import { Badge, Button, Input, Kbd, Segmented, Switch, focusRing, SectionTitle, focusWithinRing } from "@/components/ui";
 import { PERSONAS, PERSONA_ORDER } from "@/lib/personas";
 import { DEFAULT_CONFIG, hasSavedConfig, listSessions, loadConfig, saveConfig } from "@/lib/storage";
 import { CATEGORIES, CUSTOM_TOPIC_MAX, CUSTOM_TOPIC_MIN, TOPICS, validateCustomTopic, type TopicCategory } from "@/lib/topics";
@@ -277,7 +277,7 @@ export default function SetupPage() {
                   Your own topic
                 </label>
                 <div
-                  className={`flex items-center gap-2 rounded-2xl border bg-canvas pr-2 pl-5 shadow-[0_1px_0_var(--color-line)] transition-[border-color,box-shadow] focus-within:border-fg focus-within:ring-4 focus-within:ring-fg/10 ${
+                  className={`flex items-center gap-2 rounded-2xl border bg-canvas pr-2 pl-5 shadow-[0_1px_0_var(--color-line)] transition-[border-color,box-shadow] focus-within:border-fg ${focusWithinRing} ${
                     error ? "border-danger/60" : "border-line-2 hover:border-fg-3"
                   }`}
                   style={inputMorph ? { viewTransitionName: "topic" } : undefined}
@@ -359,12 +359,13 @@ export default function SetupPage() {
                       <button
                         type="button"
                         data-testid="topic-option"
-                        aria-pressed={config.topic === t.title}
+                        data-selected={config.topic === t.title || undefined}
                         title={t.title}
                         onClick={(e) => chooseTopic(t.title, t.category, e.currentTarget.querySelector<HTMLElement>("[data-topic-text]"))}
-                        className={`group flex h-full w-full items-start gap-2 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-left text-[13px] leading-snug text-fg-2 transition-colors hover:border-line-2 hover:bg-surface-2 hover:text-fg ${focusRing}`}
+                        className={`group flex h-full w-full items-start gap-2 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-left text-[13px] leading-snug text-fg-2 transition-colors hover:border-line-2 hover:bg-surface-2 hover:text-fg data-[selected]:border-line-2 data-[selected]:text-fg ${focusRing}`}
                       >
-                        <span data-topic-text className="line-clamp-2 min-w-0 flex-1 text-pretty">
+                        {/* Case-based topics are short briefs: show them in full so you read the case before picking. */}
+                        <span data-topic-text className={`min-w-0 flex-1 text-pretty ${t.category === "Case-based" ? "" : "line-clamp-3"}`}>
                           {t.title}
                         </span>
                         <ArrowRight className="mt-0.5 shrink-0 text-fg-3 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
@@ -403,7 +404,7 @@ export default function SetupPage() {
 
                   {sessions && sessions.length > 0 && (
                     <details className="group/recent">
-                      <summary className={`w-fit cursor-pointer list-none rounded text-[13px] text-fg-3 transition-colors hover:text-fg ${focusRing}`}>
+                      <summary className={`w-fit cursor-pointer list-none rounded text-[13px] text-fg-3 transition-colors hover:text-fg [&::-webkit-details-marker]:hidden ${focusRing}`}>
                         Recent sessions <span className="tabular-nums">({Math.min(3, sessions.length)})</span>
                         <span className="ml-1 inline-block transition-transform group-open/recent:rotate-90" aria-hidden="true">
                           ›
@@ -469,7 +470,7 @@ export default function SetupPage() {
                 </p>
               </div>
               <ul
-                className="animate-rise mt-5 divide-y divide-line rounded-2xl border border-line bg-canvas/80 backdrop-blur-sm [@media(max-height:880px)]:mt-3"
+                className="animate-rise mt-5 divide-y divide-line rounded-2xl border border-line bg-canvas [@media(max-height:880px)]:mt-3"
                 style={{ animationDelay: "160ms" }}
               >
                 {USE_CASES.map((u) => (
@@ -488,13 +489,14 @@ export default function SetupPage() {
       ) : (
         // ================= step 2: room settings (split like step 1: visual left, action right) =================
         // No transform animation on <main>, the right column or anything wrapping the fixed mobile button.
-        <main id="main" className="grid min-h-[calc(100dvh-4rem-1px)] pb-40 lg:grid-cols-2 lg:pb-0">
-          {/* RIGHT (action): first in the DOM so phones see the controls first */}
+        <main id="main" className="grid min-h-[calc(100dvh-4rem-1px)] pb-40 lg:h-[calc(100dvh-4rem-1px)] lg:min-h-0 lg:grid-cols-2 lg:pb-0">
+          {/* RIGHT (action). On phones the panel (left half) comes first, so you see who you're up against. */}
           <section
             aria-labelledby="settings-heading"
-            className="flex min-w-0 flex-col justify-center px-4 py-8 sm:px-8 lg:order-2 lg:px-12 lg:py-6 xl:px-16"
+            className="flex min-w-0 flex-col px-4 py-8 sm:px-8 lg:order-2 lg:overflow-y-auto lg:overscroll-contain lg:px-12 lg:py-6 xl:px-16"
           >
-            <div className="mx-auto w-full max-w-xl">
+            {/* my-auto centres the column, and still scrolls from the top when it overflows */}
+            <div className="mx-auto my-auto w-full max-w-xl">
               <p className="animate-rise font-mono text-xs tracking-wide text-fg-3 uppercase">Room settings</p>
               <h1
                 id="settings-heading"
@@ -510,9 +512,12 @@ export default function SetupPage() {
               >
                 <div className="divide-y divide-line">
                   <div className="flex items-center justify-between gap-4 py-2.5">
-                    <label htmlFor="student-name" className="shrink-0 text-[13px] whitespace-nowrap text-fg-2">
-                      Your name
-                    </label>
+                    <div className="min-w-0">
+                      <label htmlFor="student-name" className="text-[13px] whitespace-nowrap text-fg-2">
+                        Your name
+                      </label>
+                      <p className="text-xs text-fg-3">Used by the panel and on your report</p>
+                    </div>
                     <Input
                       id="student-name"
                       name="name"
@@ -522,7 +527,7 @@ export default function SetupPage() {
                       value={config.studentName}
                       onChange={(e) => update({ studentName: e.target.value.slice(0, 30) })}
                       maxLength={30}
-                      placeholder="Optional…"
+                      placeholder="e.g. Aditi…"
                       className="h-8 w-full max-w-52"
                     />
                   </div>
@@ -549,7 +554,7 @@ export default function SetupPage() {
                       options={DURATIONS}
                       value={durationValue}
                       onChange={(durationMin) => update({ durationMin })}
-                      render={(d) => `${d}m`}
+                      render={(d) => `${d} min`}
                       testId={(d) => `duration-${d}`}
                     />
                   </div>
@@ -584,7 +589,7 @@ export default function SetupPage() {
                     </button>
                     {customize && (
                       <div id="more-settings" className="divide-y divide-line">
-                        <div className="flex items-center justify-between gap-4 py-2.5">
+                        <div className="flex items-center justify-between gap-4 py-2">
                           <label htmlFor="patience" className="text-[13px] text-fg-2">
                             Pause before AIs speak
                           </label>
@@ -603,7 +608,7 @@ export default function SetupPage() {
                             <span className="w-9 text-right text-[13px] text-fg tabular-nums">{(config.patienceMs / 1000).toFixed(1)} s</span>
                           </span>
                         </div>
-                        <div className="flex items-center justify-between gap-4 py-2.5">
+                        <div className="flex items-center justify-between gap-4 py-2">
                           <div className="text-[13px] text-fg-2">Live captions</div>
                           <Switch checked={config.captions} onChange={(captions) => update({ captions })} label="Live captions" testId="captions-toggle" />
                         </div>
@@ -637,21 +642,16 @@ export default function SetupPage() {
           {/* LEFT (visual): the topic, your live table and the panel picker */}
           <aside
             aria-labelledby="topic-heading"
-            className="flex min-w-0 items-center justify-center border-t border-line bg-surface px-4 py-8 sm:px-8 lg:order-1 lg:border-t-0 lg:border-r lg:px-10 lg:py-6"
+            className="order-first flex min-w-0 items-center justify-center border-b border-line bg-surface px-4 py-8 sm:px-8 lg:order-1 lg:overflow-y-auto lg:border-r lg:border-b-0 lg:px-10 lg:py-6"
           >
             <div className="w-full max-w-xl">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h2 id="topic-heading" className="font-mono text-xs tracking-wide text-fg-3 uppercase">
-                    Topic
-                  </h2>
-                  <p
-                    className="font-display mt-2 line-clamp-2 text-3xl leading-tight text-balance"
-                    style={{ viewTransitionName: "topic" }}
-                    title={config.topic}
-                  >
-                    {config.topic}
-                  </p>
+                  <SectionTitle eyebrow="Topic" id="topic-heading">
+                    <span className="line-clamp-2" style={{ viewTransitionName: "topic" }} title={config.topic}>
+                      {config.topic}
+                    </span>
+                  </SectionTitle>
                 </div>
                 <Button variant="secondary" size="sm" data-testid="topic-change" onClick={back} className="mt-5 shrink-0">
                   Change
@@ -666,9 +666,7 @@ export default function SetupPage() {
 
               <section aria-labelledby="panel-heading" className="animate-rise mt-1" style={{ animationDelay: "80ms" }}>
                 <div className="flex items-baseline justify-between gap-4">
-                  <h2 id="panel-heading" className="text-sm font-medium">
-                    Panel
-                  </h2>
+                  <SectionTitle id="panel-heading">Panel</SectionTitle>
                   <span className="text-[13px] text-fg-3 tabular-nums">{panelCount} of 3–5 picked</span>
                 </div>
                 <ul className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -689,7 +687,7 @@ export default function SetupPage() {
                             on ? "border-fg bg-surface-2" : "border-line hover:border-line-2"
                           } ${locked ? "cursor-not-allowed" : ""}`}
                         >
-                          <span className={`flex min-w-0 items-center gap-2 pr-5 transition-opacity ${on ? "" : "opacity-60"}`}>
+                          <span className="flex min-w-0 items-center gap-2 pr-5">
                             <Avatar speaker={id} size={30} />
                             <span className="min-w-0">
                               <span className="flex items-center text-[13px] leading-tight font-medium text-fg">
@@ -699,7 +697,7 @@ export default function SetupPage() {
                               <span className="block truncate text-[11px] leading-snug text-fg-3">{p.archetype}</span>
                             </span>
                           </span>
-                          <span className={`line-clamp-3 text-[12px] leading-snug text-fg-2 transition-opacity ${on ? "" : "opacity-70"}`}>{p.blurb}</span>
+                          <span className="line-clamp-3 text-[12px] leading-snug text-fg-2">{p.blurb}</span>
                           <span
                             aria-hidden="true"
                             className={`absolute top-2 right-2 grid size-4 place-items-center rounded-full border transition-colors ${

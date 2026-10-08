@@ -152,6 +152,6 @@ test.describe("sample report", () => {
 
   test("unknown report id shows not-found", async ({ page }) => {
     await page.goto("/report/does-not-exist");
-    await expect(page.getByText(/Report not found/i)).toBeVisible();
+    await expect(page.getByText(/This report isn.t here/i)).toBeVisible();
   });
 });

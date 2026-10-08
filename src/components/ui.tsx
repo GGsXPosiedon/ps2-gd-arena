@@ -4,6 +4,8 @@ import type { ComponentProps, ReactNode } from "react";
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
 export const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue";
+/** Same visual weight as focusRing, for wrappers around an input that hides its own outline. */
+export const focusWithinRing = "focus-within:ring-2 focus-within:ring-blue";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
@@ -208,4 +210,31 @@ export function Notice({ children, tone = "default", className }: { children: Re
 /** 16px loading ring. */
 export function Spinner({ className }: { className?: string }) {
   return <span aria-hidden className={cx("inline-block size-4 animate-spin rounded-full border-2 border-line-2 border-t-fg", className)} />;
+}
+
+/**
+ * Section title used on every page (see the type rule in globals.css): serif display heading with an
+ * optional small mono uppercase eyebrow above it. Card-level headings stay Geist sans.
+ */
+export function SectionTitle({
+  children,
+  eyebrow,
+  id,
+  as: Tag = "h2",
+  className,
+}: {
+  children: ReactNode;
+  eyebrow?: ReactNode;
+  id?: string;
+  as?: "h1" | "h2" | "h3";
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      {eyebrow && <div className="mb-1.5 font-mono text-[11px] tracking-wider text-fg-3 uppercase">{eyebrow}</div>}
+      <Tag id={id} className="font-display text-2xl leading-tight text-balance text-fg">
+        {children}
+      </Tag>
+    </div>
+  );
 }

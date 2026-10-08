@@ -2,7 +2,7 @@
 
 import { forwardRef, useLayoutEffect, useRef, useState } from "react";
 import { AiTag, Avatar } from "@/components/Avatar";
-import { Badge, focusRing } from "@/components/ui";
+import { Badge, SectionTitle, focusRing, focusWithinRing } from "@/components/ui";
 import type { EngineState } from "@/lib/engine";
 import { speakerName } from "@/lib/personas";
 import type { RoomConfig, Utterance } from "@/lib/types";
@@ -85,10 +85,7 @@ export const TranscriptPanel = forwardRef<
   return (
     <aside className={`flex min-h-0 flex-col bg-canvas ${className}`} aria-label="Transcript">
       <header className="flex shrink-0 items-end justify-between border-b border-line px-5 pt-4 pb-3">
-        <div>
-          <p className="font-mono text-[11px] tracking-wide text-fg-3 uppercase">Live</p>
-          <h2 className="font-display text-2xl leading-tight text-fg">Transcript</h2>
-        </div>
+        <SectionTitle eyebrow="Live">Transcript</SectionTitle>
         {utterances.length > 0 && <span className="pb-1 font-mono text-[11px] text-fg-3 tabular-nums">{utterances.length} lines</span>}
       </header>
 
@@ -163,9 +160,13 @@ export const TranscriptPanel = forwardRef<
       </div>
 
       <div className="shrink-0 border-t border-line p-3">
-        {typed && <p className="mb-2 text-xs text-fg-3">Typing mode. Press Enter to say your point.</p>}
+        {typed && (
+          <p id="typing-hint" className="mb-2 text-xs text-fg-3">
+            Typing mode. Press Enter to say your point.
+          </p>
+        )}
         <form
-          className={`flex items-center gap-1 rounded-md border bg-surface pr-1 transition-colors focus-within:border-fg-3 focus-within:ring-2 focus-within:ring-blue/40 ${
+          className={`flex items-center gap-1 rounded-md border bg-surface pr-1 transition-colors focus-within:border-fg-3 ${focusWithinRing} ${
             highlight ? "border-fg" : "border-line-2"
           }`}
           onSubmit={(e) => {
@@ -179,6 +180,7 @@ export const TranscriptPanel = forwardRef<
           <input
             ref={inputRef}
             id="composer"
+            aria-describedby={typed ? "typing-hint" : undefined}
             name="point"
             data-testid="composer-input"
             value={draft}

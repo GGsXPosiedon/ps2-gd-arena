@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { TableFigure } from "@/components/TableFigure";
-import { Button, Spinner } from "@/components/ui";
+import { Button, Segmented, Spinner } from "@/components/ui";
 import type { RoomConfig } from "@/lib/types";
 
 /** Pre-join screen: the table, one line on how it works, and a single Start button. */
@@ -12,19 +12,20 @@ export function Lobby({
   speakerMode,
   starting,
   onJoin,
+  onInputModeChange,
 }: {
   config: RoomConfig;
   inputMode: "voice" | "typed";
   speakerMode: boolean;
   starting: boolean;
   onJoin: () => void;
+  onInputModeChange?: (mode: "voice" | "typed") => void;
 }) {
   const typed = inputMode === "typed";
   const meta = [
     `${config.personas.length} AI participants`,
     config.e2e ? null : `${config.durationMin} min`,
     config.language === "hinglish" ? "Hinglish" : "English",
-    typed ? "Keyboard" : speakerMode ? "Mic, speaker mode" : "Mic",
   ].filter(Boolean).join(" · ");
 
   const how = typed
@@ -35,7 +36,7 @@ export function Lobby({
 
   return (
     <div className="w-full max-w-xl text-center">
-      <p className="text-xs text-fg-3">{meta}</p>
+      <p className="font-mono text-[11px] tracking-wide text-fg-3 uppercase">{meta}</p>
       <h1 className="font-display mt-2 text-3xl leading-tight text-balance text-fg sm:text-[40px]">{config.topic}</h1>
       {config.focus && (
         <p className="mx-auto mt-3 w-fit rounded-full border border-line px-3 py-1 text-[13px] text-fg-2">
@@ -48,6 +49,20 @@ export function Lobby({
         studentName={config.studentName}
         className="animate-rise mx-auto mt-6 w-full max-w-lg"
       />
+
+      {onInputModeChange && (
+        <div className="mt-5 flex items-center justify-center gap-3 text-[13px] text-fg-2">
+          <span>Speak with</span>
+          <Segmented
+            label="Speak with"
+            options={["voice", "typed"] as const}
+            value={inputMode}
+            onChange={onInputModeChange}
+            render={(m) => (m === "voice" ? (speakerMode ? "Mic (speakers)" : "Mic") : "Keyboard")}
+            testId={(m) => (m === "voice" ? "lobby-input-mic" : "lobby-input-keyboard")}
+          />
+        </div>
+      )}
 
       <Button
         variant="primary"
@@ -68,12 +83,6 @@ export function Lobby({
       </p>
 
       <p className="mt-6 text-xs text-fg-3">
-        <Link href="/check" className="rounded underline-offset-4 transition-colors hover:text-fg hover:underline">
-          Change input
-        </Link>
-        <span className="mx-2" aria-hidden="true">
-          ·
-        </span>
         <Link href="/?step=table" className="rounded underline-offset-4 transition-colors hover:text-fg hover:underline">
           Back to setup
         </Link>
