@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
+import { AsciiField } from "@/components/AsciiField";
 import { Avatar } from "@/components/Avatar";
 import { MicTest, type InputChoice } from "@/components/MicTest";
 import { TableFigure } from "@/components/TableFigure";
 import { SiteHeader } from "@/components/SiteHeader";
-import { Badge, Button, Input, Segmented, Switch, focusRing } from "@/components/ui";
+import { Badge, Button, Input, Kbd, Segmented, Switch, focusRing } from "@/components/ui";
 import { PERSONAS, PERSONA_ORDER } from "@/lib/personas";
 import { DEFAULT_CONFIG, hasSavedConfig, listSessions, loadConfig, saveConfig } from "@/lib/storage";
 import { CATEGORIES, CUSTOM_TOPIC_MAX, CUSTOM_TOPIC_MIN, TOPICS, validateCustomTopic, type TopicCategory } from "@/lib/topics";
@@ -45,6 +46,21 @@ function ShuffleIcon() {
     </svg>
   );
 }
+
+const icon = (d: string) => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d={d} />
+  </svg>
+);
+
+/** What students use GD Arena for (shown on the homepage's visual half). */
+const USE_CASES: { title: string; detail: string; icon: ReactNode }[] = [
+  { title: "Campus placements", detail: "The GD round, practised before the real one.", icon: icon("M4 8h16v11H4zM9 8V5h6v3M4 13h16") },
+  { title: "MBA admissions", detail: "CAT and XAT GD-PI practice, any topic.", icon: icon("M2 9l10-5 10 5-10 5zM6 11v5c3 2 9 2 12 0v-5") },
+  { title: "Handle a dominator", detail: "Hold the floor when someone cuts you off.", icon: icon("M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z") },
+  { title: "Open and close strong", detail: "Start the discussion, then summarise at the end.", icon: icon("M5 21V4M5 4h11l-2 4 2 4H5") },
+  { title: "Hinglish rooms", detail: "Practise the way many GDs actually sound.", icon: icon("M4 5h10v7H8l-4 3zM14 9h6v7l-3-2h-5v-2") },
+];
 
 function topicError(raw: string): string | null {
   if (!validateCustomTopic(raw)) return null;
@@ -128,6 +144,12 @@ export default function SetupPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+
+  // The topic input is the focal point: focus it on desktop (not on phones, where it would pop the keyboard).
+  useEffect(() => {
+    if (step !== "topic") return;
+    if (window.matchMedia("(min-width: 1024px) and (pointer: fine)").matches) inputRef.current?.focus({ preventScroll: true });
+  }, [step]);
 
   const update = (patch: Partial<RoomConfig>) => setConfig((c) => ({ ...c, ...patch }));
 
@@ -220,7 +242,7 @@ export default function SetupPage() {
 
   return (
     <div className="min-h-screen">
-      <SiteHeader>
+      <SiteHeader wide={step === "topic"}>
         {health?.provider === "mock" && (
           <span title="No AI key is configured, so the AI participants use scripted lines.">
             <Badge tone="warn">Offline Demo Mode</Badge>
@@ -229,21 +251,23 @@ export default function SetupPage() {
       </SiteHeader>
 
       {step === "topic" ? (
-        // ================= step 1: topic, one pane =================
-        <main
-          id="main"
-          className="mx-auto grid min-h-[calc(100dvh-3.5rem-1px)] max-w-5xl items-center gap-10 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,36rem)_minmax(0,1fr)]"
-        >
-          <div className="flex min-w-0 flex-col">
-          <section aria-labelledby="topic-question" className="rounded-2xl border border-line bg-surface">
-            <div className="p-5 sm:p-6">
-              <p className="text-[13px] text-fg-3">Group discussion practice</p>
-              <h1 id="topic-question" className="mt-1 text-2xl font-semibold tracking-tight text-balance">
+        // ================= step 1: topic (split: visual left, action right) =================
+        <main id="main" className="grid min-h-[calc(100dvh-3.5rem-1px)] lg:grid-cols-2">
+          {/* RIGHT (action): first in the DOM so phones see the input first */}
+          <section aria-labelledby="topic-question" className="flex min-w-0 flex-col justify-center px-4 py-10 sm:px-8 lg:order-2 lg:px-12 xl:px-16">
+            <div className="mx-auto w-full max-w-xl">
+              <p className="animate-rise font-mono text-xs tracking-wide text-fg-3 uppercase">Group discussion practice</p>
+              <h1
+                id="topic-question"
+                className="animate-rise mt-3 text-3xl font-semibold tracking-tight text-balance sm:text-4xl"
+                style={{ animationDelay: "40ms" }}
+              >
                 What should the group discuss?
               </h1>
 
               <form
-                className="mt-5"
+                className="animate-rise mt-7"
+                style={{ animationDelay: "80ms" }}
                 onSubmit={(e) => {
                   e.preventDefault();
                   submitCustom();
@@ -253,7 +277,7 @@ export default function SetupPage() {
                   Your own topic
                 </label>
                 <div
-                  className={`flex items-center gap-2 rounded-xl border bg-canvas pr-1.5 pl-4 transition-colors focus-within:border-fg-3 ${
+                  className={`flex items-center gap-2 rounded-2xl border bg-canvas pr-2 pl-5 shadow-[0_1px_0_var(--color-line)] transition-[border-color,box-shadow] focus-within:border-fg focus-within:ring-4 focus-within:ring-fg/10 ${
                     error ? "border-danger/60" : "border-line-2 hover:border-fg-3"
                   }`}
                   style={inputMorph ? { viewTransitionName: "topic" } : undefined}
@@ -270,13 +294,23 @@ export default function SetupPage() {
                       setError(null);
                     }}
                     maxLength={CUSTOM_TOPIC_MAX + 20}
-                    placeholder="Write your own topic…"
+                    placeholder="Type a topic, or pick one below…"
                     aria-invalid={!!error}
                     aria-describedby={error ? "custom-topic-error" : undefined}
-                    className="h-12 min-w-0 flex-1 bg-transparent text-base text-fg outline-none placeholder:text-fg-3"
+                    className="h-16 min-w-0 flex-1 bg-transparent text-lg text-fg outline-none placeholder:text-fg-3 sm:h-[72px] sm:text-xl"
                   />
-                  <Button type="submit" variant={custom.trim() ? "primary" : "ghost"} size="sm" data-testid="topic-continue" aria-label="Use this topic">
-                    <ArrowRight />
+                  <span className={`hidden items-center gap-1 text-xs text-fg-3 transition-opacity sm:flex ${custom.trim() ? "opacity-100" : "opacity-0"}`} aria-hidden="true">
+                    <Kbd>Enter</Kbd>
+                  </span>
+                  <Button
+                    type="submit"
+                    variant={custom.trim() ? "primary" : "secondary"}
+                    size="lg"
+                    data-testid="topic-continue"
+                    aria-label="Use this topic"
+                    className="size-11 shrink-0 rounded-xl px-0! sm:size-12"
+                  >
+                    <ArrowRight className="size-[18px]" />
                   </Button>
                 </div>
                 {error && (
@@ -286,134 +320,170 @@ export default function SetupPage() {
                 )}
               </form>
 
-              <div role="tablist" aria-label="Topic category" className="mt-5 -mx-1 flex flex-wrap gap-1 px-1">
-                {CATEGORIES.map((c, i) => {
-                  const active = c === category;
-                  return (
+              <div className="animate-rise mt-8" style={{ animationDelay: "120ms" }}>
+                <div role="tablist" aria-label="Topic category" className="-mx-1 flex flex-wrap gap-1 px-1">
+                  {CATEGORIES.map((c, i) => {
+                    const active = c === category;
+                    return (
+                      <button
+                        key={c}
+                        ref={(el) => {
+                          tabRefs.current[i] = el;
+                        }}
+                        type="button"
+                        role="tab"
+                        id={`tab-${i}`}
+                        aria-selected={active}
+                        aria-controls="topic-list"
+                        tabIndex={active ? 0 : -1}
+                        onClick={() => setCategory(c)}
+                        onKeyDown={(e) => onTabKey(e, i)}
+                        className={`h-7 shrink-0 rounded-full border px-3 text-[13px] whitespace-nowrap transition-colors ${focusRing} ${
+                          active ? "border-line-2 bg-surface-3 text-fg" : "border-transparent text-fg-2 hover:text-fg"
+                        }`}
+                      >
+                        {c}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <ul
+                  id="topic-list"
+                  role="tabpanel"
+                  aria-labelledby={`tab-${CATEGORIES.indexOf(category)}`}
+                  className="mt-3 grid gap-2 sm:grid-cols-2 lg:max-h-[min(17rem,32vh)] lg:overflow-y-auto lg:overscroll-contain"
+                >
+                  {TOPICS.filter((t) => t.category === category).map((t) => (
+                    <li key={t.title} className="min-w-0">
+                      <button
+                        type="button"
+                        data-testid="topic-option"
+                        aria-pressed={config.topic === t.title}
+                        title={t.title}
+                        onClick={(e) => chooseTopic(t.title, t.category, e.currentTarget.querySelector<HTMLElement>("[data-topic-text]"))}
+                        className={`group flex h-full w-full items-start gap-2 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-left text-[13px] leading-snug text-fg-2 transition-colors hover:border-line-2 hover:bg-surface-2 hover:text-fg ${focusRing}`}
+                      >
+                        <span data-topic-text className="line-clamp-2 min-w-0 flex-1 text-pretty">
+                          {t.title}
+                        </span>
+                        <ArrowRight className="mt-0.5 shrink-0 text-fg-3 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+                      </button>
+                    </li>
+                  ))}
+                  <li className="min-w-0">
                     <button
-                      key={c}
-                      ref={(el) => {
-                        tabRefs.current[i] = el;
-                      }}
                       type="button"
-                      role="tab"
-                      id={`tab-${i}`}
-                      aria-selected={active}
-                      aria-controls="topic-list"
-                      tabIndex={active ? 0 : -1}
-                      onClick={() => setCategory(c)}
-                      onKeyDown={(e) => onTabKey(e, i)}
-                      className={`h-7 shrink-0 rounded-full px-3 text-[13px] whitespace-nowrap transition-colors ${focusRing} ${
-                        active ? "bg-surface-3 text-fg" : "text-fg-2 hover:text-fg"
-                      }`}
+                      data-testid="surprise-me"
+                      onClick={surprise}
+                      className={`flex h-full w-full items-center gap-2 rounded-xl border border-dashed border-line-2 px-3.5 py-2.5 text-left text-[13px] text-fg-2 transition-colors hover:border-fg-3 hover:text-fg ${focusRing}`}
                     >
-                      {c}
+                      <ShuffleIcon />
+                      Surprise me
                     </button>
-                  );
-                })}
+                  </li>
+                </ul>
               </div>
+
+              {(saved || (sessions && sessions.length > 0)) && (
+                <div className="animate-rise mt-6 space-y-2" style={{ animationDelay: "160ms" }}>
+                  {saved && (
+                    <button
+                      type="button"
+                      data-testid="use-last-setup"
+                      onClick={useLastSetup}
+                      className={`group flex max-w-full items-center gap-2 rounded text-[13px] text-fg-3 transition-colors hover:text-fg ${focusRing}`}
+                    >
+                      <span className="min-w-0 truncate">
+                        Use last setup: <span className="text-fg-2 group-hover:text-fg">{saved.topic}</span>
+                      </span>
+                      <ArrowRight className="shrink-0" />
+                    </button>
+                  )}
+
+                  {sessions && sessions.length > 0 && (
+                    <details className="group/recent">
+                      <summary className={`w-fit cursor-pointer list-none rounded text-[13px] text-fg-3 transition-colors hover:text-fg ${focusRing}`}>
+                        Recent sessions <span className="tabular-nums">({Math.min(3, sessions.length)})</span>
+                        <span className="ml-1 inline-block transition-transform group-open/recent:rotate-90" aria-hidden="true">
+                          ›
+                        </span>
+                      </summary>
+                      <ul className="mt-1">
+                        {sessions.slice(0, 3).map((s, i) => {
+                          const d = delta(i);
+                          return (
+                            <li key={s.id}>
+                              <Link
+                                href={`/report/${s.id}`}
+                                data-testid="recent-session"
+                                className={`flex items-center gap-4 rounded py-1.5 text-[13px] text-fg-2 transition-colors hover:text-fg ${focusRing}`}
+                              >
+                                <span className="min-w-0 flex-1 truncate">{s.config.topic}</span>
+                                <span className="shrink-0 text-fg-3 tabular-nums">{dateFmt.format(new Date(s.createdAt))}</span>
+                                <span className="w-14 shrink-0 text-right tabular-nums">
+                                  {/* No score when the student didn't speak (nothing was assessed). */}
+                                  {s.report && s.utterances.some((u) => u.speaker === "you") ? (
+                                    <>
+                                      {s.report.readiness}
+                                      {d !== null && d !== 0 && (
+                                        <span className={d > 0 ? "ml-1 text-ok" : "ml-1 text-danger"}>
+                                          {d > 0 ? "+" : "−"}
+                                          {Math.abs(d)}
+                                        </span>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <span className="text-fg-3">–</span>
+                                  )}
+                                </span>
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
             </div>
-
-            <ul
-              id="topic-list"
-              role="tabpanel"
-              aria-labelledby={`tab-${CATEGORIES.indexOf(category)}`}
-              className="max-h-[min(20rem,34vh)] divide-y divide-line overflow-y-auto overscroll-contain border-t border-line"
-            >
-              {TOPICS.filter((t) => t.category === category).map((t) => (
-                <li key={t.title}>
-                  <button
-                    type="button"
-                    data-testid="topic-option"
-                    aria-pressed={config.topic === t.title}
-                    onClick={(e) => chooseTopic(t.title, t.category, e.currentTarget.querySelector<HTMLElement>("[data-topic-text]"))}
-                    className={`group flex w-full items-center justify-between gap-4 px-5 py-3 text-left text-sm text-fg-2 transition-colors hover:bg-surface-2 hover:text-fg sm:px-6 ${focusRing}`}
-                  >
-                    <span data-topic-text className="min-w-0 text-pretty">
-                      {t.title}
-                    </span>
-                    <ArrowRight className="shrink-0 text-fg-3 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-
-            <button
-              type="button"
-              data-testid="surprise-me"
-              onClick={surprise}
-              className={`flex w-full items-center gap-2 rounded-b-2xl border-t border-line px-5 py-3 text-left text-sm text-fg-2 transition-colors hover:bg-surface-2 hover:text-fg sm:px-6 ${focusRing}`}
-            >
-              <ShuffleIcon />
-              Surprise me
-            </button>
           </section>
 
-          {(saved || (sessions && sessions.length > 0)) && (
-            <div className="mt-4 space-y-3 px-1">
-              {saved && (
-                <button
-                  type="button"
-                  data-testid="use-last-setup"
-                  onClick={useLastSetup}
-                  className={`group flex max-w-full items-center gap-2 rounded text-[13px] text-fg-3 transition-colors hover:text-fg ${focusRing}`}
-                >
-                  <span className="min-w-0 truncate">
-                    Use last setup: <span className="text-fg-2 group-hover:text-fg">{saved.topic}</span>
-                  </span>
-                  <ArrowRight className="shrink-0" />
-                </button>
-              )}
-
-              {sessions && sessions.length > 0 && (
-                <section aria-labelledby="recent-heading">
-                  <h2 id="recent-heading" className="text-[13px] text-fg-3">
-                    Recent
-                  </h2>
-                  <ul className="mt-1">
-                    {sessions.slice(0, 3).map((s, i) => {
-                      const d = delta(i);
-                      return (
-                        <li key={s.id}>
-                          <Link
-                            href={`/report/${s.id}`}
-                            data-testid="recent-session"
-                            className={`flex items-center gap-4 rounded py-1.5 text-[13px] text-fg-2 transition-colors hover:text-fg ${focusRing}`}
-                          >
-                            <span className="min-w-0 flex-1 truncate">{s.config.topic}</span>
-                            <span className="shrink-0 text-fg-3 tabular-nums">{dateFmt.format(new Date(s.createdAt))}</span>
-                            <span className="w-14 shrink-0 text-right tabular-nums">
-                              {/* No score when the student didn't speak (nothing was assessed). */}
-                              {s.report && s.utterances.some((u) => u.speaker === "you") ? (
-                                <>
-                                  {s.report.readiness}
-                                  {d !== null && d !== 0 && (
-                                    <span className={d > 0 ? "ml-1 text-ok" : "ml-1 text-danger"}>
-                                      {d > 0 ? "+" : "−"}
-                                      {Math.abs(d)}
-                                    </span>
-                                  )}
-                                </>
-                              ) : (
-                                <span className="text-fg-3">–</span>
-                              )}
-                            </span>
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </section>
-              )}
+          {/* LEFT (visual): the table over a faint ASCII field, plus what people use it for */}
+          <aside
+            aria-label="About GD Arena"
+            className="relative flex min-h-[34rem] items-center justify-center overflow-hidden border-t border-line bg-surface px-6 py-8 lg:order-1 lg:min-h-0 lg:border-t-0 lg:border-r lg:py-6"
+          >
+            <AsciiField className="absolute inset-0" />
+            <div className="relative z-10 w-full max-w-md">
+              <TableFigure
+                personas={config.personas}
+                studentName={config.studentName}
+                className="animate-rise mx-auto w-full max-w-sm [@media(max-height:880px)]:max-w-[16rem]"
+              />
+              {/* soft backdrop keeps the text legible over the ASCII field */}
+              <div className="animate-rise mx-auto mt-2 w-fit rounded-xl bg-surface/80 px-4 py-2 backdrop-blur-sm" style={{ animationDelay: "80ms" }}>
+                <p className="text-center text-xl font-semibold tracking-tight text-balance">Practise the group discussion before the real one.</p>
+                <p className="mt-1.5 text-center text-[13px] text-fg-2 text-pretty">
+                  AI panelists who interrupt, argue and drift off-topic. Feedback tied to what you actually said.
+                </p>
+              </div>
+              <ul
+                className="animate-rise mt-5 divide-y divide-line rounded-2xl border border-line bg-canvas/80 backdrop-blur-sm [@media(max-height:880px)]:mt-3"
+                style={{ animationDelay: "160ms" }}
+              >
+                {USE_CASES.map((u) => (
+                  <li key={u.title} className="flex items-start gap-3 px-4 py-2.5 [@media(max-height:880px)]:py-2">
+                    <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg border border-line-2 text-fg-2">{u.icon}</span>
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium text-fg">{u.title}</span>
+                      <span className="block text-xs text-fg-3">{u.detail}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
-          )}
-          </div>
-
-          {/* The table: the AI participants, the moderator and you. Hidden on phones to keep the pane in focus. */}
-          <figure className="animate-rise hidden lg:block" style={{ animationDelay: "120ms" }} aria-hidden="true">
-            <TableFigure personas={config.personas} studentName={config.studentName} className="w-full" />
-            <figcaption className="mt-2 text-center text-[13px] text-fg-3">A moderator, AI participants and you around one table.</figcaption>
-          </figure>
+          </aside>
         </main>
       ) : (
         // ================= step 2: panel + settings, one screen =================
