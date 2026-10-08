@@ -15,7 +15,7 @@ import { TranscriptDrawer } from "@/components/report/TranscriptDrawer";
 import { useReplay } from "@/components/report/useReplay";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Sparkline } from "@/components/Sparkline";
-import { Badge, Button, buttonClass, Card, Notice, Spinner, focusRing } from "@/components/ui";
+import { Badge, Button, buttonClass, Card, Notice, Spinner } from "@/components/ui";
 import { SAMPLE_SESSION } from "@/lib/fixtures/sampleSession";
 import { computeMetrics, findOpeningCandidates, fmtTime } from "@/lib/metrics";
 import { PERSONAS, speakerName } from "@/lib/personas";
@@ -23,13 +23,6 @@ import { listSessions, loadSession, saveConfig, saveSession } from "@/lib/storag
 import type { CriterionKey, ReportRequest, ReportResult, SessionRecord, Utterance } from "@/lib/types";
 
 const dateFmt = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
-
-const SECTIONS = [
-  { id: "overview", label: "Overview" },
-  { id: "moments", label: "Moments" },
-  { id: "speaking", label: "Speaking" },
-] as const;
-type SectionId = (typeof SECTIONS)[number]["id"];
 
 function durationLabel(ms: number) {
   const s = Math.round(ms / 1000);
@@ -102,7 +95,6 @@ export default function ReportView({ id }: { id: string }) {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
-  const [active, setActive] = useState<SectionId>("overview");
   const [prevScore] = useState(() => (session && id !== "sample" ? previousReadiness(session) : null));
   const replay = useReplay(session);
   const isSample = id === "sample";
@@ -168,35 +160,6 @@ export default function ReportView({ id }: { id: string }) {
     started.current = true;
     void fetchReport();
   }, [session, fetchReport]);
-
-  // Section nav: the last section whose top has passed under the sticky bars is active; mirror it in the hash.
-  const lastHash = useRef<string>("");
-  useEffect(() => {
-    if (!session) return;
-    let frame = 0;
-    const update = () => {
-      frame = 0;
-      let cur: SectionId = spoke ? "overview" : "moments";
-      for (const sec of SECTIONS) {
-        const el = document.getElementById(sec.id);
-        if (el && el.getBoundingClientRect().top <= 140) cur = sec.id;
-      }
-      setActive(cur);
-      if (lastHash.current !== cur && window.scrollY > 0) {
-        lastHash.current = cur;
-        history.replaceState(null, "", `#${cur}`);
-      }
-    };
-    const onScroll = () => {
-      if (!frame) frame = requestAnimationFrame(update);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    update();
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      if (frame) cancelAnimationFrame(frame);
-    };
-  }, [session, spoke]);
 
   const byId = useMemo(() => new Map((session?.utterances ?? []).map((u) => [u.id, u])), [session]);
 
@@ -279,265 +242,255 @@ export default function ReportView({ id }: { id: string }) {
     </div>
   );
 
+  const figures = (
+    <div className="grid grid-cols-2 gap-3">
+      <figure className="rounded-2xl border border-line bg-canvas/60 p-3">
+        <SkillsRadar scores={spoke ? (report?.scores ?? null) : null} className="w-full" />
+        <figcaption className="mt-1 text-center text-xs text-fg-3">Six skills, out of 5</figcaption>
+      </figure>
+      <figure className="rounded-2xl border border-line bg-canvas/60 p-3">
+        <FloorShareFigure speakers={metrics.speakers} studentName={sn} fairShare={metrics.fairShare} className="w-full" />
+        <figcaption className="mt-1 text-center text-xs text-fg-3">Who held the floor</figcaption>
+      </figure>
+    </div>
+  );
+
   return (
     <div data-testid="report" className="min-h-screen">
-      {/* ---------- header ---------- */}
       <SiteHeader wide>
-        {/* Wrappers carry the responsive visibility (the buttons' own display class would override "hidden"). */}
-        <span className="hidden md:flex">
-          <Button variant="ghost" size="sm" onClick={() => exportTranscript(session)}>
-            Export Transcript
+        {/* On wide screens the transcript button lives in the sticky left panel. */}
+        <span className="lg:hidden">
+          <Button variant="ghost" size="sm" onClick={() => setDrawerOpen(true)}>
+            Transcript
           </Button>
         </span>
-        <span className="hidden sm:flex">
-          <Link href="/" data-testid="new-discussion" className={buttonClass("secondary", "sm")}>
-            New Discussion
-          </Link>
-        </span>
-        <Button variant="primary" size="sm" data-testid="practice-again" onClick={() => practise()}>
-          Practice Again
-        </Button>
       </SiteHeader>
 
-      {/* ---------- section nav ---------- */}
-      <nav aria-label="Report sections" className="sticky top-16 z-20 border-b border-line bg-canvas/85 backdrop-blur">
-        <div className="mx-auto flex h-11 max-w-6xl items-center gap-1 overflow-x-auto px-4 sm:px-6">
-          {SECTIONS.filter((x) => spoke || x.id !== "overview").map((s) => (
-            <a
-              key={s.id}
-              href={`#${s.id}`}
-              aria-current={active === s.id ? "location" : undefined}
-              onClick={() => setActive(s.id)}
-              className={`relative flex h-11 shrink-0 items-center px-3 text-[13px] transition-colors ${focusRing} ${
-                active === s.id ? "text-fg" : "text-fg-2 hover:text-fg"
-              }`}
-            >
-              {s.label}
-              {active === s.id && <span aria-hidden className="absolute inset-x-3 bottom-0 h-px bg-fg" />}
-            </a>
-          ))}
-          <span className="flex-1" />
-          <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setDrawerOpen(true)}>
-            Transcript
-            <ArrowIcon />
-          </Button>
-        </div>
-      </nav>
-
-      <main id="main" className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
-        {/* ---------- hero ---------- */}
-        <section aria-label="Summary" aria-live="polite" aria-busy={pending} className="grid gap-8 py-10 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-          <div className="min-w-0 space-y-5">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-fg-2">
-              {isSample && <Badge tone="blue">Sample</Badge>}
-              <span>{dateFmt.format(new Date(session.createdAt))}</span>
-              <span aria-hidden>·</span>
-              <span className="tabular-nums">{durationLabel(discussionMs)} discussion</span>
-              <span aria-hidden>·</span>
-              <span>{cfg.personas.length} AI participants</span>
-              <span aria-hidden>·</span>
-              <span>{cfg.language === "hinglish" ? "Hinglish" : "English"}</span>
-              {session.inputMode === "typed" && <Badge>Typed Session</Badge>}
-            </div>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-balance break-words text-fg sm:text-3xl">{cfg.topic}</h1>
-              <p className="mt-2 text-[13px] text-pretty text-fg-3">
-                With {cfg.personas.map((p) => `${PERSONAS[p].name} (${PERSONAS[p].archetype})`).join(", ")}
-                {cfg.focus ? ` · Focus: ${cfg.focus}` : ""}
-              </p>
-            </div>
-
-            {!spoke ? (
-              <Card className="p-5">
-                <EmptyTable className="mb-4 w-40" />
-                <h2 className="text-base font-semibold text-fg">You didn&apos;t speak this time</h2>
-                <p className="mt-1 max-w-prose text-sm text-pretty text-fg-2">
-                  There&apos;s nothing to score yet. Next time, open with a one-line definition of the topic in the first minute, then give your
-                  position. The moments below show where you could have come in.
-                </p>
-                <Button variant="primary" className="mt-4" onClick={() => practise(CRITERION.initiation.focus)}>
-                  Try Again (Same Topic)
-                </Button>
-              </Card>
-            ) : report ? (
-              <>
-                {report.summary && <p className="max-w-prose text-[15px] leading-relaxed text-pretty text-fg-2">{report.summary}</p>}
-                {heuristicNote}
-                {bo?.text && (
-                  <div className="rounded-xl border border-line-2 bg-surface p-5">
-                    <div className="text-xs font-medium tracking-wide text-fg-3 uppercase">Focus Next Time</div>
-                    <p className="mt-2 text-base leading-snug text-pretty text-fg">{bo.text}</p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {boUtt && (
-                        <Button variant="secondary" size="sm" onClick={() => goToMoment(boUtt.id)}>
-                          Go to Moment · {fmtTime(boUtt.start)}
-                          <ArrowIcon />
-                        </Button>
-                      )}
-                      {!demo && focusCriterion && (
-                        <Button variant="ghost" size="sm" onClick={() => practise(CRITERION[focusCriterion].focus)}>
-                          Practise This
-                        </Button>
-                      )}
+      <main id="main" className="grid min-h-[calc(100dvh-4rem-1px)] lg:grid-cols-2">
+        {/* ================= LEFT (visual): score, figures, actions ================= */}
+        <aside
+          aria-label="Your score and next steps"
+          aria-live="polite"
+          aria-busy={pending}
+          className="border-b border-line bg-surface lg:sticky lg:top-16 lg:h-[calc(100dvh-4rem)] lg:overflow-y-auto lg:overscroll-contain lg:border-r lg:border-b-0"
+        >
+          <div className="mx-auto flex min-h-full w-full max-w-lg flex-col justify-center gap-6 px-6 py-8 lg:py-10">
+            <div className="animate-rise">
+              {spoke ? (
+                <>
+                  <ReadinessGauge value={report ? report.readiness : null} delta={delta} className="mx-auto w-full max-w-[220px]" />
+                  <p className="mt-1 text-center text-[13px] text-fg-3">
+                    {report ? "Readiness for a placement GD" : fetchError && !loading ? "Score unavailable until feedback loads" : "Scoring…"}
+                  </p>
+                  {trend.length >= 2 && (
+                    <div className="mx-auto mt-4 max-w-xs">
+                      <div className="flex items-center justify-between text-xs text-fg-3">
+                        <span>Last {trend.length} sessions</span>
+                        <span className="tabular-nums">
+                          {trend[0]} → <span className="text-fg-2">{trend[trend.length - 1]}</span>
+                        </span>
+                      </div>
+                      <Sparkline values={trend} className="mt-2 h-8 w-full" />
                     </div>
-                  </div>
-                )}
-              </>
-            ) : fetchError && !loading ? (
-              <Notice tone="warn" className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <span>Feedback didn&apos;t load. Your numbers below are still accurate. Check your connection, then retry.</span>
-                <Button data-testid="retry-feedback" variant="secondary" size="sm" onClick={retry}>
-                  Retry
-                </Button>
-              </Notice>
-            ) : (
-              <div className="space-y-3">
-                <p className="flex items-center gap-2 text-sm text-fg-2">
-                  <Spinner />
-                  Analysing your discussion…
-                </p>
-                <Skeleton className="h-4 w-4/5" />
-                <Skeleton className="h-4 w-3/5" />
-                <Skeleton className="mt-2 h-28" />
-              </div>
-            )}
-          </div>
-
-          <Card className="rounded-2xl p-5">
-            {spoke ? (
-              <>
-                <ReadinessGauge value={report ? report.readiness : null} delta={delta} className="mx-auto w-full max-w-[240px]" />
-                <p className="mt-2 text-center text-[13px] text-fg-3">
-                  {report ? "Readiness for a placement GD" : fetchError && !loading ? "Score unavailable until feedback loads" : "Scoring…"}
-                </p>
-                {trend.length >= 2 && (
-                  <div className="mt-4 border-t border-line pt-3">
-                    <div className="flex items-center justify-between text-xs text-fg-3">
-                      <span>Last {trend.length} sessions</span>
-                      <span className="tabular-nums">
-                        {trend[0]} → <span className="text-fg-2">{trend[trend.length - 1]}</span>
-                      </span>
-                    </div>
-                    <Sparkline values={trend} className="mt-2 h-8 w-full" />
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="grid min-h-48 place-items-center text-center">
-                <div>
-                  <div className="text-sm text-fg">Not scored</div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center">
+                  <EmptyTable className="mx-auto w-40" />
+                  <div className="mt-3 text-sm text-fg">Not scored</div>
                   <p className="mt-1 text-[13px] text-fg-3">Speak at least once to get a readiness score.</p>
                 </div>
+              )}
+            </div>
+
+            {/* Figures sit here on wide screens; phones see them after the story. */}
+            <div className="animate-rise hidden lg:block" style={{ animationDelay: "80ms" }}>
+              {figures}
+            </div>
+
+            <div className="animate-rise space-y-2" style={{ animationDelay: "140ms" }}>
+              <Button variant="primary" size="lg" data-testid="practice-again" className="w-full" onClick={() => practise()}>
+                Practice Again
+                <ArrowIcon />
+              </Button>
+              <Link href="/" data-testid="new-discussion" className={buttonClass("secondary", "lg", "w-full")}>
+                New Discussion
+              </Link>
+              <div className="flex justify-center gap-1 pt-1">
+                <Button variant="ghost" size="sm" onClick={() => setDrawerOpen(true)}>
+                  Transcript
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => exportTranscript(session)}>
+                  Export Transcript
+                </Button>
               </div>
+            </div>
+
+            <p className="text-center text-xs text-pretty text-fg-3">
+              All other participants were AI. Their statistics are generated and may be wrong. Scores are guidance, not a placement verdict.
+            </p>
+          </div>
+        </aside>
+
+        {/* ================= RIGHT (story) ================= */}
+        <div className="min-w-0 px-4 py-10 sm:px-8 lg:px-12 xl:px-16">
+          <div className="mx-auto w-full max-w-2xl">
+            <section aria-label="Summary" className="space-y-5">
+              <div className="animate-rise">
+                <p className="font-mono text-xs tracking-wide text-fg-3 uppercase">Report</p>
+                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-fg-2">
+                  {isSample && <Badge tone="blue">Sample</Badge>}
+                  <span>{dateFmt.format(new Date(session.createdAt))}</span>
+                  <span aria-hidden>·</span>
+                  <span className="tabular-nums">{durationLabel(discussionMs)} discussion</span>
+                  <span aria-hidden>·</span>
+                  <span>{cfg.personas.length} AI participants</span>
+                  <span aria-hidden>·</span>
+                  <span>{cfg.language === "hinglish" ? "Hinglish" : "English"}</span>
+                  {session.inputMode === "typed" && <Badge>Typed Session</Badge>}
+                </div>
+                <h1 className="font-display mt-3 text-4xl leading-[1.05] text-balance break-words text-fg sm:text-5xl">{cfg.topic}</h1>
+                <p className="mt-3 text-[13px] text-pretty text-fg-3">
+                  With {cfg.personas.map((p) => `${PERSONAS[p].name} (${PERSONAS[p].archetype})`).join(", ")}
+                  {cfg.focus ? ` · Focus: ${cfg.focus}` : ""}
+                </p>
+              </div>
+
+              <div className="animate-rise space-y-5" style={{ animationDelay: "80ms" }}>
+                {!spoke ? (
+                  <Card className="p-5">
+                    <h2 className="text-base font-semibold text-fg">You didn&apos;t speak this time</h2>
+                    <p className="mt-1 max-w-prose text-sm text-pretty text-fg-2">
+                      There&apos;s nothing to score yet. Next time, open with a one-line definition of the topic in the first minute, then give your
+                      position. The moments below show where you could have come in.
+                    </p>
+                    <Button variant="primary" className="mt-4" onClick={() => practise(CRITERION.initiation.focus)}>
+                      Try Again (Same Topic)
+                    </Button>
+                  </Card>
+                ) : report ? (
+                  <>
+                    {report.summary && <p className="text-[15px] leading-relaxed text-pretty text-fg-2">{report.summary}</p>}
+                    {heuristicNote}
+                    {bo?.text && (
+                      <div className="rounded-2xl border border-line-2 bg-surface p-5">
+                        <div className="font-mono text-xs tracking-wide text-fg-3 uppercase">Focus next time</div>
+                        <p className="mt-2 text-base leading-snug text-pretty text-fg">{bo.text}</p>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {boUtt && (
+                            <Button variant="secondary" size="sm" onClick={() => goToMoment(boUtt.id)}>
+                              Go to Moment · {fmtTime(boUtt.start)}
+                              <ArrowIcon />
+                            </Button>
+                          )}
+                          {!demo && focusCriterion && (
+                            <Button variant="ghost" size="sm" onClick={() => practise(CRITERION[focusCriterion].focus)}>
+                              Practise This
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : fetchError && !loading ? (
+                  <Notice tone="warn" className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                    <span>Feedback didn&apos;t load. Your numbers below are still accurate. Check your connection, then retry.</span>
+                    <Button data-testid="retry-feedback" variant="secondary" size="sm" onClick={retry}>
+                      Retry
+                    </Button>
+                  </Notice>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="flex items-center gap-2 text-sm text-fg-2">
+                      <Spinner />
+                      Analysing your discussion…
+                    </p>
+                    <Skeleton className="h-4 w-4/5" />
+                    <Skeleton className="h-4 w-3/5" />
+                    <Skeleton className="mt-2 h-28" />
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* ---------- scores ---------- */}
+            {spoke && (
+              <section id="overview" aria-labelledby="overview-heading" className="mt-12 scroll-mt-20 border-t border-line pt-10">
+                <SectionHeading id="overview" title="Scores" hint="Six skills placement panels look for, scored out of 5." />
+                <Card className="rounded-2xl">
+                  <ul className="divide-y divide-line">
+                    {CRITERIA.map((c) => {
+                      const v = report?.scores[c.key];
+                      return (
+                        <li
+                          key={c.key}
+                          data-testid={`score-${c.key}`}
+                          className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-5 py-3.5 sm:grid-cols-[minmax(0,1fr)_120px_48px]"
+                        >
+                          <span className="min-w-0 text-sm text-fg">{c.label}</span>
+                          {v === undefined ? (
+                            <Skeleton className="col-span-2 h-2 sm:col-span-1" />
+                          ) : (
+                            <>
+                              <span aria-hidden className="order-3 col-span-2 flex gap-1 sm:order-none sm:col-span-1">
+                                {[1, 2, 3, 4, 5].map((i) => (
+                                  <span key={i} className={`h-1.5 flex-1 rounded-full ${i <= v ? (v <= 2 ? "bg-warn" : "bg-fg") : "bg-surface-3"}`} />
+                                ))}
+                              </span>
+                              <span className="text-right font-mono text-sm text-fg tabular-nums">
+                                {v}
+                                <span className="text-fg-3">/5</span>
+                              </span>
+                            </>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </Card>
+              </section>
             )}
-          </Card>
-        </section>
 
-        {/* ---------- overview ---------- */}
-        {spoke && (
-          <section id="overview" aria-labelledby="overview-heading" className="scroll-mt-28 border-t border-line pt-10">
-            <SectionHeading id="overview" title="Overview" hint="Six skills placement panels look for, scored out of 5." />
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
-              <Card className="rounded-2xl p-4">
-                <SkillsRadar scores={report?.scores ?? null} className="w-full" />
-              </Card>
-              <Card className="rounded-2xl">
-                <ul className="divide-y divide-line">
-                  {CRITERIA.map((c) => {
-                    const v = report?.scores[c.key];
-                    return (
-                      <li key={c.key} data-testid={`score-${c.key}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-5 py-3.5 sm:grid-cols-[minmax(0,1fr)_120px_48px]">
-                        <span className="min-w-0 text-sm text-fg">{c.label}</span>
-                        {v === undefined ? (
-                          <Skeleton className="col-span-2 h-2 sm:col-span-1" />
-                        ) : (
-                          <>
-                            <span aria-hidden className="order-3 col-span-2 flex gap-1 sm:order-none sm:col-span-1">
-                              {[1, 2, 3, 4, 5].map((i) => (
-                                <span key={i} className={`h-1.5 flex-1 rounded-full ${i <= v ? (v <= 2 ? "bg-warn" : "bg-fg") : "bg-surface-3"}`} />
-                              ))}
-                            </span>
-                            <span className="text-right font-mono text-sm text-fg tabular-nums">
-                              {v}
-                              <span className="text-fg-3">/5</span>
-                            </span>
-                          </>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </Card>
-            </div>
-          </section>
-        )}
+            {/* ---------- moments ---------- */}
+            <section id="moments" aria-labelledby="moments-heading" className="mt-12 scroll-mt-20 border-t border-line pt-10">
+              <SectionHeading
+                id="moments"
+                title="Moments"
+                hint={
+                  session.inputMode === "typed"
+                    ? "The discussion in order: what worked, what to try next time and where you could have come in. This was a typed session, so there is no recording of you."
+                    : session.hasAudio
+                      ? "The discussion in order: what worked, what to try next time and where you could have come in. Replay plays the moment back."
+                      : "The discussion in order: what worked, what to try next time and where you could have come in."
+                }
+              />
+              <Moments
+                session={session}
+                report={report}
+                loading={pending}
+                demo={demo}
+                onJump={jump}
+                onReplay={toggleReplay}
+                canReplay={replay.canReplay}
+                replayingId={replay.playingId}
+                onPractise={(c) => practise(CRITERION[c].focus)}
+              />
+              {!report && fetchError && !loading && <Card className="mt-3 p-5 text-sm text-fg-2">Moments appear once feedback loads.</Card>}
+            </section>
 
-        {/* ---------- moments ---------- */}
-        <section id="moments" aria-labelledby="moments-heading" className="mt-14 scroll-mt-28 border-t border-line pt-10">
-          <SectionHeading
-            id="moments"
-            title="Moments"
-            hint={
-              session.inputMode === "typed"
-                ? "The discussion in order: what worked, what to try next time and where you could have come in. This was a typed session, so there is no recording of you."
-                : session.hasAudio
-                  ? "The discussion in order: what worked, what to try next time and where you could have come in. Replay plays the moment back."
-                  : "The discussion in order: what worked, what to try next time and where you could have come in."
-            }
-          />
-          <Moments
-            session={session}
-            report={report}
-            loading={pending}
-            demo={demo}
-            onJump={jump}
-            onReplay={toggleReplay}
-            canReplay={replay.canReplay}
-            replayingId={replay.playingId}
-            onPractise={(c) => practise(CRITERION[c].focus)}
-          />
-          {!report && fetchError && !loading && (
-            <Card className="mt-3 p-5 text-sm text-fg-2">Moments appear once feedback loads.</Card>
-          )}
-        </section>
-
-        {/* ---------- speaking ---------- */}
-        <section id="speaking" aria-labelledby="speaking-heading" className="mt-14 scroll-mt-28 border-t border-line pt-10">
-          <SectionHeading id="speaking" title="Speaking" hint="Who held the floor, when, and your numbers against healthy ranges." />
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
-            <Card className="rounded-2xl p-4">
-              <FloorShareFigure speakers={metrics.speakers} studentName={sn} fairShare={metrics.fairShare} className="w-full" />
-            </Card>
-            <Timeline session={session} metrics={metrics} onJump={jump} />
+            {/* ---------- speaking ---------- */}
+            <section id="speaking" aria-labelledby="speaking-heading" className="mt-12 scroll-mt-20 border-t border-line pt-10">
+              <SectionHeading id="speaking" title="Speaking" hint="Who held the floor, when, and your numbers against healthy ranges." />
+              <div className="mb-4 lg:hidden">{figures}</div>
+              <Timeline session={session} metrics={metrics} onJump={jump} />
+              {spoke && (
+                <div className="mt-4">
+                  <MetricTiles m={metrics} discussionMs={discussionMs} />
+                </div>
+              )}
+            </section>
           </div>
-          {spoke && (
-            <div className="mt-4">
-              <MetricTiles m={metrics} discussionMs={discussionMs} />
-            </div>
-          )}
-        </section>
-
-        {/* ---------- next steps ---------- */}
-        <section aria-labelledby="next" className="mt-14 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-surface p-6">
-          <div>
-            <h2 id="next" className="text-base font-semibold tracking-tight text-fg">
-              Go Again
-            </h2>
-            <p className="mt-1 text-[13px] text-fg-2">Same topic and panel, or start fresh.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/" className={buttonClass("secondary")}>
-              New Discussion
-            </Link>
-            <Button variant="primary" onClick={() => practise()}>
-              Practice Again
-            </Button>
-          </div>
-        </section>
-
-        <footer className="mt-8 text-xs text-pretty text-fg-3">
-          All other participants were AI. Their statistics are generated and may be wrong. Scores are guidance, not a placement verdict.
-        </footer>
+        </div>
       </main>
 
       <TranscriptDrawer session={session} open={drawerOpen} onClose={() => setDrawerOpen(false)} highlightId={highlightId} />
