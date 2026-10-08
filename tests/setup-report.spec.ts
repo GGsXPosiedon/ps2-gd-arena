@@ -61,6 +61,9 @@ test.describe("setup page", () => {
     await expect(page.locator('[data-testid^="persona-card-"][aria-pressed="true"]')).toHaveCount(5);
 
     // Settings controls exist.
+    // Settings are collapsed into a summary line; Customize reveals the controls.
+    await page.getByTestId("customize-settings").click();
+    await expect(page.getByTestId("customize-settings")).toHaveAttribute("aria-expanded", "true");
     await page.getByTestId("language-hinglish").click();
     await expect(page.getByTestId("language-hinglish")).toHaveAttribute("aria-pressed", "true");
     await page.getByTestId("duration-6").click();

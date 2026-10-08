@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { EmptyTable } from "@/components/report/figures/EmptyTable";
 import { FloorShareFigure } from "@/components/report/figures/FloorShareFigure";
 import { ReadinessGauge } from "@/components/report/figures/ReadinessGauge";
 import { SkillsRadar } from "@/components/report/figures/SkillsRadar";
@@ -12,6 +13,7 @@ import { Moments } from "@/components/report/Moments";
 import { Timeline } from "@/components/report/Timeline";
 import { TranscriptDrawer } from "@/components/report/TranscriptDrawer";
 import { useReplay } from "@/components/report/useReplay";
+import { Sparkline } from "@/components/Sparkline";
 import { Badge, Button, buttonClass, Card, Notice, Spinner, focusRing } from "@/components/ui";
 import { SAMPLE_SESSION } from "@/lib/fixtures/sampleSession";
 import { computeMetrics, findOpeningCandidates, fmtTime } from "@/lib/metrics";
@@ -106,6 +108,17 @@ export default function ReportView({ id }: { id: string }) {
 
   const metrics = useMemo(() => (session ? computeMetrics(session) : null), [session]);
   const spoke = !!session?.utterances.some((u) => u.speaker === "you");
+
+  // Readiness across recent scored sessions, oldest → newest, ending with this one (not for the sample).
+  const trend = useMemo(() => {
+    if (!session || isSample) return [];
+    const list = listSessions(); // newest first
+    const i = list.findIndex((s) => s.id === session.id);
+    const older = (i >= 0 ? list.slice(i + 1) : list).filter((s) => s.report).map((s) => s.report!.readiness);
+    const values = older.slice(0, 7).reverse();
+    if (report) values.push(report.readiness);
+    return values;
+  }, [session, isSample, report]);
 
   useEffect(() => {
     let alive = true;
@@ -344,6 +357,7 @@ export default function ReportView({ id }: { id: string }) {
 
             {!spoke ? (
               <Card className="p-5">
+                <EmptyTable className="mb-4 w-40" />
                 <h2 className="text-base font-semibold text-fg">You didn&apos;t speak this time</h2>
                 <p className="mt-1 max-w-prose text-sm text-pretty text-fg-2">
                   There&apos;s nothing to score yet. Next time, open with a one-line definition of the topic in the first minute, then give your
@@ -404,6 +418,17 @@ export default function ReportView({ id }: { id: string }) {
                 <p className="mt-2 text-center text-[13px] text-fg-3">
                   {report ? "Readiness for a placement GD" : fetchError && !loading ? "Score unavailable until feedback loads" : "Scoring…"}
                 </p>
+                {trend.length >= 2 && (
+                  <div className="mt-4 border-t border-line pt-3">
+                    <div className="flex items-center justify-between text-xs text-fg-3">
+                      <span>Last {trend.length} sessions</span>
+                      <span className="tabular-nums">
+                        {trend[0]} → <span className="text-fg-2">{trend[trend.length - 1]}</span>
+                      </span>
+                    </div>
+                    <Sparkline values={trend} className="mt-2 h-8 w-full" />
+                  </div>
+                )}
               </>
             ) : (
               <div className="grid min-h-48 place-items-center text-center">
