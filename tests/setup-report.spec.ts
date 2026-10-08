@@ -133,7 +133,13 @@ test.describe("sample report", () => {
 
   test("report API down: metrics still render and retry is offered", async ({ page }) => {
     await page.route("**/api/report", (route) => route.fulfill({ status: 500, body: "boom" }));
-    await page.goto("/report/sample");
+    // A stored session without a cached report (the sample ships with one, so it never calls the API).
+    await page.goto("/");
+    await page.evaluate((s) => {
+      localStorage.setItem("floor:session:down1", JSON.stringify({ ...s, id: "down1", report: undefined }));
+      localStorage.setItem("floor:sessions", JSON.stringify(["down1"]));
+    }, SAMPLE_SESSION);
+    await page.goto("/report/down1");
     await expect(page.getByTestId("report")).toBeVisible();
     await expect(page.getByTestId("timeline-lane-you")).toBeVisible();
     await expect(page.getByTestId("retry-feedback")).toBeVisible({ timeout: 30_000 });

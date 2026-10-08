@@ -93,4 +93,90 @@ export const SAMPLE_SESSION: SessionRecord = {
   inputMode: "voice",
   hasAudio: false,
   audioStartOffset: 0,
+  // Precomputed AI report so the sample opens instantly (generated once with the real report pipeline).
+  report: {
+    "readiness": 85,
+    "summary": "You delivered a composed, highly structured performance with pragmatic solutions like sector-specific pilots and flexible hours. You actively listened, built on your peers' points, and reclaimed the floor firmly when interrupted. To improve further, aim to initiate early and set the debate's framework right at the start.",
+    "biggestOpportunity": {
+      "text": "You waited until after three other speakers spoke before entering at 01:17. Opening the discussion early would let you establish the framework around informal labor right away.",
+      "utteranceId": "u2"
+    },
+    "scores": {
+      "initiation": 2,
+      "ideas": 5,
+      "building": 5,
+      "listening": 5,
+      "interruptions": 4,
+      "ending": 5
+    },
+    "feedback": [
+      {
+        "criterion": "initiation",
+        "verdict": "try",
+        "point": "You hesitated when the floor opened, allowing others to anchor the discussion around formal office productivity before you introduced the informal sector perspective.",
+        "utteranceId": "u2",
+        "quote": "The floor is open. Who would like to begin?",
+        "couldHaveSaid": "I'd like to frame this discussion by looking at India's unique workforce reality—a four-day work week impacts formal corporate employees very differently from our vast informal sector."
+      },
+      {
+        "criterion": "ideas",
+        "verdict": "good",
+        "point": "You brought solid practical depth to the debate by distinguishing between the formal corporate sector and informal labor like kirana store owners.",
+        "utteranceId": "u7",
+        "quote": "I'd like to add something. We're assuming everyone has a desk job, but most of India's workforce is informal. For a kirana store owner, a four-day week basically means nothing."
+      },
+      {
+        "criterion": "building",
+        "verdict": "good",
+        "point": "You seamlessly extended Priya's point on burnout to offer a constructive alternative rather than just pointing out problems.",
+        "utteranceId": "u15",
+        "quote": "Building on Priya's point, the burnout risk is real. A better design might be flexible hours rather than a fixed four days, so a hospital and an IT firm can each choose what works."
+      },
+      {
+        "criterion": "listening",
+        "verdict": "good",
+        "point": "You listened closely to Arjun's push for progress while tactfully steering the conversation back to practical business constraints.",
+        "utteranceId": "u30",
+        "quote": "I agree on the direction, Arjun, but how fast matters. Should small businesses really be forced to follow the same rules?"
+      },
+      {
+        "criterion": "interruptions",
+        "verdict": "good",
+        "point": "When Arjun cut you off mid-sentence, you politely but assertively reclaimed your time and delivered a sharp conceptual distinction.",
+        "utteranceId": "u17",
+        "quote": "Sorry Arjun, can I finish that thought? Flexibility is not no change. It changes who decides, the worker or the employer."
+      },
+      {
+        "criterion": "ending",
+        "verdict": "good",
+        "point": "Your closing statement was exemplary—it summarized the key tension, reconciled group opinions, and restated a clear, actionable stance.",
+        "utteranceId": "u38",
+        "quote": "To sum up, we agreed a four-day week can raise productivity, but India's workforce is mostly informal and sectors differ. My position: start with voluntary pilots in IT and government offices, measure output, and expand only where the data supports it."
+      }
+    ],
+    "missedOpenings": [
+      {
+        "afterUtteranceId": "u5",
+        "at": 63500,
+        "reason": "off-topic tangent",
+        "context": "Rohan brought up a lighthearted tangent about playing cricket during no-meeting Fridays in a startup.",
+        "suggestion": "While bonding exercises are valuable, we need to focus on structural feasibility across sectors beyond desk jobs."
+      },
+      {
+        "afterUtteranceId": "u12",
+        "at": 135000,
+        "reason": "1.6 s pause",
+        "context": "Arjun interrupted your point and claimed all pilot data clearly shows gains.",
+        "suggestion": "Actually, those pilots primarily involved white-collar firms, which doesn't automatically translate to manufacturing or essential services."
+      },
+      {
+        "afterUtteranceId": "u25",
+        "at": 277000,
+        "reason": "2.0 s pause",
+        "context": "Arjun dismissed your proposal for pilots as a mere delay tactic.",
+        "suggestion": "Pilots aren't delays; they provide empirical data so policy decisions don't destabilize critical supply chains."
+      }
+    ],
+    "source": "llm"
+  },
 };

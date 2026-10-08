@@ -24,7 +24,7 @@ function phaseBands(s: SessionRecord, total: number): { phase: Phase; start: num
   return marks.map((m, i) => ({ phase: m.phase, start: m.t, end: Math.min(marks[i + 1]?.t ?? endAt, total) })).filter((b) => b.end > b.start);
 }
 
-/** Talk-time share bar + "who spoke when" lanes. */
+/** "Who spoke when": a moderator phase track over one lane per participant. */
 export function Timeline({
   session,
   metrics,
@@ -43,27 +43,8 @@ export function Timeline({
   const bands = phaseBands(session, total);
 
   return (
-    <Card className="p-5">
-      {/* share bar */}
-      <div className="flex h-2 gap-px overflow-hidden rounded-full bg-surface-3">
-        {participants.map((l) => (
-          <div
-            key={l.speaker}
-            title={`${speakerName(l.speaker, sn)} ${pctFmt.format(shareOf(l.speaker))}`}
-            style={{ width: `${shareOf(l.speaker) * 100}%`, background: speakerColor(l.speaker) }}
-          />
-        ))}
-      </div>
-      <div className="mt-3 mb-5 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-fg-2">
-        {participants.map((l) => (
-          <span key={l.speaker} className="inline-flex items-center gap-1.5">
-            <span aria-hidden className="size-2 rounded-full" style={{ background: speakerColor(l.speaker) }} />
-            <span className={l.speaker === "you" ? "font-medium text-fg" : ""}>{speakerName(l.speaker, sn)}</span>
-            <span className="font-mono text-xs tabular-nums">{pctFmt.format(shareOf(l.speaker))}</span>
-          </span>
-        ))}
-      </div>
-
+    <Card className="min-w-0 rounded-2xl p-5">
+      <h3 className="mb-4 text-sm font-medium text-fg">Who Spoke When</h3>
       {/* moderator track: phases of the session + where the moderator stepped in */}
       <div data-testid="timeline-phases" className="mb-3 grid grid-cols-[84px_1fr_40px] items-center gap-3 border-b border-line pb-3">
         <span className="truncate text-[13px] text-fg-3">Moderator</span>

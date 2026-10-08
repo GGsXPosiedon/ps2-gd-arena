@@ -3,34 +3,35 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FloorShareFigure } from "@/components/report/figures/FloorShareFigure";
+import { ReadinessGauge } from "@/components/report/figures/ReadinessGauge";
+import { SkillsRadar } from "@/components/report/figures/SkillsRadar";
+import { CRITERIA, CRITERION } from "@/components/report/labels";
 import { MetricTiles } from "@/components/report/MetricTiles";
+import { Moments } from "@/components/report/Moments";
 import { Timeline } from "@/components/report/Timeline";
-import { Transcript } from "@/components/report/Transcript";
+import { TranscriptDrawer } from "@/components/report/TranscriptDrawer";
 import { useReplay } from "@/components/report/useReplay";
-import { Badge, Button, buttonClass, Card, Notice, Spinner } from "@/components/ui";
+import { Badge, Button, buttonClass, Card, Notice, Spinner, focusRing } from "@/components/ui";
 import { SAMPLE_SESSION } from "@/lib/fixtures/sampleSession";
 import { computeMetrics, findOpeningCandidates, fmtTime } from "@/lib/metrics";
-import { PERSONAS, speakerColor, speakerName } from "@/lib/personas";
-import { loadSession, saveConfig, saveSession } from "@/lib/storage";
-import type { CriterionKey, FeedbackPoint, ReportRequest, ReportResult, SessionRecord, Utterance } from "@/lib/types";
-
-const CRITERIA: { key: CriterionKey; label: string; focus: string }[] = [
-  { key: "initiation", label: "Starting the Discussion", focus: "Open the discussion in the first minute" },
-  { key: "ideas", label: "Quality of Ideas", focus: "Back every point with an example or a number" },
-  { key: "building", label: "Building on Others", focus: "Name someone and build on their point" },
-  { key: "listening", label: "Listening", focus: "Ask a question and bring a quieter member in" },
-  { key: "interruptions", label: "Handling Interruptions", focus: "Hold the floor when someone cuts in" },
-  { key: "ending", label: "Ending Strongly", focus: "Close with a clear summary and your position" },
-];
-const BY_KEY = Object.fromEntries(CRITERIA.map((c) => [c.key, c])) as Record<CriterionKey, (typeof CRITERIA)[number]>;
+import { PERSONAS, speakerName } from "@/lib/personas";
+import { listSessions, loadSession, saveConfig, saveSession } from "@/lib/storage";
+import type { CriterionKey, ReportRequest, ReportResult, SessionRecord, Utterance } from "@/lib/types";
 
 const dateFmt = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" });
+
+const SECTIONS = [
+  { id: "overview", label: "Overview" },
+  { id: "moments", label: "Moments" },
+  { id: "speaking", label: "Speaking" },
+] as const;
+type SectionId = (typeof SECTIONS)[number]["id"];
 
 function durationLabel(ms: number) {
   const s = Math.round(ms / 1000);
   if (s < 60) return `${s} s`;
-  const m = Math.round(s / 60);
-  return `${m} min`;
+  return `${Math.round(s / 60)} min`;
 }
 
 function exportTranscript(s: SessionRecord) {
@@ -55,19 +56,9 @@ function exportTranscript(s: SessionRecord) {
 }
 
 function Skeleton({ className = "" }: { className?: string }) {
-  return <div aria-hidden className={`animate-pulse rounded-xl bg-surface-2 ${className}`} />;
+  return <div aria-hidden className={`animate-pulse rounded-lg bg-surface-2 ${className}`} />;
 }
 
-const PlayIcon = () => (
-  <svg aria-hidden viewBox="0 0 16 16" className="size-3.5" fill="currentColor">
-    <path d="M4.5 2.8v10.4a.6.6 0 0 0 .9.5l8.2-5.2a.6.6 0 0 0 0-1L5.4 2.3a.6.6 0 0 0-.9.5Z" />
-  </svg>
-);
-const StopIcon = () => (
-  <svg aria-hidden viewBox="0 0 16 16" className="size-3.5" fill="currentColor">
-    <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" />
-  </svg>
-);
 const ArrowIcon = () => (
   <svg aria-hidden viewBox="0 0 16 16" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 8h10M9 4l4 4-4 4" />
@@ -76,11 +67,11 @@ const ArrowIcon = () => (
 
 function SectionHeading({ id, title, hint }: { id: string; title: string; hint?: string }) {
   return (
-    <div className="mb-4">
-      <h2 id={id} className="scroll-mt-6 text-base font-semibold tracking-tight text-balance text-fg">
+    <div className="mb-5">
+      <h2 id={`${id}-heading`} className="text-lg font-semibold tracking-tight text-balance text-fg">
         {title}
       </h2>
-      {hint && <p className="mt-1 text-[13px] text-fg-2">{hint}</p>}
+      {hint && <p className="mt-1 text-[13px] text-pretty text-fg-2">{hint}</p>}
     </div>
   );
 }
@@ -88,6 +79,14 @@ function SectionHeading({ id, title, hint }: { id: string; title: string; hint?:
 function initialSession(id: string): { session: SessionRecord | null; inStorage: boolean } {
   const stored = loadSession(id);
   return { session: stored ?? (id === "sample" ? SAMPLE_SESSION : null), inStorage: !!stored };
+}
+
+/** Readiness change vs the previous scored session (sessions are listed newest first). */
+function previousReadiness(session: SessionRecord): number | null {
+  const list = listSessions();
+  const i = list.findIndex((s) => s.id === session.id);
+  if (i < 0) return null;
+  return list.slice(i + 1).find((s) => s.report)?.report?.readiness ?? null;
 }
 
 // Client-only (rendered with ssr: false) so it can read localStorage during the first render.
@@ -98,7 +97,10 @@ export default function ReportView({ id }: { id: string }) {
   const [loading, setLoading] = useState(!!session && !session.report);
   const [fetchError, setFetchError] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+  const [active, setActive] = useState<SectionId>("overview");
+  const [prevScore] = useState(() => (session && id !== "sample" ? previousReadiness(session) : null));
   const replay = useReplay(session);
   const isSample = id === "sample";
 
@@ -153,12 +155,54 @@ export default function ReportView({ id }: { id: string }) {
     void fetchReport();
   }, [session, fetchReport]);
 
+  // Section nav: the last section whose top has passed under the sticky bars is active; mirror it in the hash.
+  const lastHash = useRef<string>("");
+  useEffect(() => {
+    if (!session) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      let cur: SectionId = spoke ? "overview" : "moments";
+      for (const sec of SECTIONS) {
+        const el = document.getElementById(sec.id);
+        if (el && el.getBoundingClientRect().top <= 140) cur = sec.id;
+      }
+      setActive(cur);
+      if (lastHash.current !== cur && window.scrollY > 0) {
+        lastHash.current = cur;
+        history.replaceState(null, "", `#${cur}`);
+      }
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    update();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [session, spoke]);
+
   const byId = useMemo(() => new Map((session?.utterances ?? []).map((u) => [u.id, u])), [session]);
 
+  /** Open the transcript at a line. */
   const jump = useCallback((uid: string) => {
     setHighlightId(uid);
-    document.getElementById(`utt-${uid}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setDrawerOpen(true);
   }, []);
+
+  /** Scroll to the moment card for a line if Moments rendered one, else open the transcript there. */
+  const goToMoment = useCallback(
+    (uid: string) => {
+      const el = document.getElementById(`moment-${uid}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.focus({ preventScroll: true });
+      } else jump(uid);
+    },
+    [jump],
+  );
 
   /** Same topic and panel, straight to the mic check. `focus` adds a drill goal shown in the room lobby. */
   const practise = useCallback(
@@ -168,6 +212,11 @@ export default function ReportView({ id }: { id: string }) {
       router.push("/check");
     },
     [session, router],
+  );
+
+  const toggleReplay = useCallback(
+    (u: Utterance) => (replay.playingId === u.id ? replay.stop() : replay.play(u)),
+    [replay],
   );
 
   if (!session) {
@@ -188,142 +237,146 @@ export default function ReportView({ id }: { id: string }) {
   const cfg = session.config;
   const sn = cfg.studentName;
   const discussionMs = Math.max(0, session.discussionEnd - session.discussionStart);
-  const order = (f: FeedbackPoint) => CRITERIA.findIndex((c) => c.key === f.criterion);
-  const feedback = report ? [...report.feedback].sort((a, b) => order(a) - order(b)) : [];
   const bo = report?.biggestOpportunity;
   const boUtt = bo?.utteranceId ? byId.get(bo.utteranceId) : undefined;
+  const demo = demoMode || isSample;
   const showRetryAi = report?.source === "heuristic" && !demoMode && !isSample;
   const pending = !report && (loading || !fetchError);
+  const delta = report && prevScore !== null ? report.readiness - prevScore : null;
+  // Criterion to drill for the headline opportunity: the one tied to the same line, else the weakest score.
+  const focusCriterion: CriterionKey | null = report
+    ? (report.feedback.find((f) => f.utteranceId === bo?.utteranceId && f.verdict === "try")?.criterion ??
+      [...CRITERIA].sort((a, b) => report.scores[a.key] - report.scores[b.key])[0].key)
+    : null;
 
-  const actions = (withIds: boolean) => (
-    <div className="flex flex-wrap gap-2">
-      <Button variant="primary" data-testid={withIds ? "practice-again" : undefined} onClick={() => practise()}>
-        Practice Again
-      </Button>
-      <Link href="/" data-testid={withIds ? "new-discussion" : undefined} className={buttonClass("secondary")}>
-        New Discussion
-      </Link>
+  const heuristicNote = report?.source === "heuristic" && (
+    <div className="flex flex-wrap items-center gap-3">
+      <Badge>{demo ? "Demo Mode: Rule-Based Feedback" : "Rule-Based Feedback"}</Badge>
+      {showRetryAi && (
+        <Button data-testid="retry-feedback" variant="secondary" size="sm" onClick={retry} disabled={loading}>
+          {loading && <Spinner className="size-3.5" />}
+          {loading ? "Retrying…" : "Retry with AI"}
+        </Button>
+      )}
     </div>
   );
 
-  const quoteBlock = (u: Utterance, quote: string) => {
-    const playing = replay.playingId === u.id;
-    const loadingClip = replay.loadingId === u.id;
-    return (
-      <figure className="rounded-r-md border-l-2 bg-surface-2 py-2.5 pr-3 pl-3" style={{ borderColor: speakerColor(u.speaker) }}>
-        <blockquote data-testid="quote" className="text-sm leading-relaxed text-pretty break-words text-fg">
-          &ldquo;{quote}
-          {u.text.trim().endsWith(quote.trim()) ? "" : "…"}&rdquo;
-        </blockquote>
-        <figcaption className="mt-2 flex flex-wrap items-center justify-between gap-2">
-          <span className="font-mono text-xs text-fg-3 tabular-nums">
-            {speakerName(u.speaker, sn)} · {fmtTime(u.start)}
-            {u.interrupted && u.interruptedBy ? ` · cut off by ${speakerName(u.interruptedBy, sn)}` : ""}
-          </span>
-          <span className="flex gap-1">
-            <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => jump(u.id)}>
-              Go to Line
-            </Button>
-            {replay.canReplay(u) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2"
-                aria-label={playing ? "Stop replay" : `Replay ${speakerName(u.speaker, sn)} at ${fmtTime(u.start)}`}
-                onClick={() => (playing ? replay.stop() : replay.play(u))}
-              >
-                {loadingClip ? <Spinner className="size-3.5" /> : playing ? <StopIcon /> : <PlayIcon />}
-                {loadingClip ? "Loading…" : playing ? "Stop" : "Replay"}
-              </Button>
-            )}
-          </span>
-        </figcaption>
-      </figure>
-    );
-  };
-
   return (
-    <div data-testid="report" className="min-h-screen lg:grid lg:grid-cols-[minmax(0,1fr)_380px]">
-      <main id="main" className="min-w-0">
-        <div className="flex h-14 items-center justify-between border-b border-line px-5 sm:px-8">
-          <Link href="/" className="rounded-sm text-sm font-semibold tracking-tight text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue">
-            GD Floor
-          </Link>
-          <Button variant="ghost" size="sm" onClick={() => exportTranscript(session)}>
-            Export Transcript
+    <div data-testid="report" className="min-h-screen">
+      {/* ---------- header ---------- */}
+      <header className="sticky top-0 z-30 border-b border-line bg-canvas/85 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2 text-sm">
+            <Link href="/" className={`shrink-0 rounded-sm font-semibold tracking-tight text-fg ${focusRing}`}>
+              GD Floor
+            </Link>
+            <span aria-hidden className="text-fg-3">
+              /
+            </span>
+            <span className="truncate text-fg-2">Report</span>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Wrappers carry the responsive visibility (the buttons' own display class would override "hidden"). */}
+            <span className="hidden md:flex">
+              <Button variant="ghost" size="sm" onClick={() => exportTranscript(session)}>
+                Export Transcript
+              </Button>
+            </span>
+            <span className="hidden gap-2 sm:flex">
+              <Link href="/" data-testid="new-discussion" className={buttonClass("secondary", "sm")}>
+                New Discussion
+              </Link>
+            </span>
+            <Button variant="primary" size="sm" data-testid="practice-again" onClick={() => practise()}>
+              Practice Again
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      {/* ---------- section nav ---------- */}
+      <nav aria-label="Report sections" className="sticky top-14 z-20 border-b border-line bg-canvas/85 backdrop-blur">
+        <div className="mx-auto flex h-11 max-w-6xl items-center gap-1 overflow-x-auto px-4 sm:px-6">
+          {SECTIONS.filter((x) => spoke || x.id !== "overview").map((s) => (
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              aria-current={active === s.id ? "location" : undefined}
+              onClick={() => setActive(s.id)}
+              className={`relative flex h-11 shrink-0 items-center px-3 text-[13px] transition-colors ${focusRing} ${
+                active === s.id ? "text-fg" : "text-fg-2 hover:text-fg"
+              }`}
+            >
+              {s.label}
+              {active === s.id && <span aria-hidden className="absolute inset-x-3 bottom-0 h-px bg-fg" />}
+            </a>
+          ))}
+          <span className="flex-1" />
+          <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setDrawerOpen(true)}>
+            Transcript
+            <ArrowIcon />
           </Button>
         </div>
+      </nav>
 
-        <div className="mx-auto max-w-5xl space-y-12 px-5 py-8 sm:px-8 sm:py-10">
-          {/* header */}
-          <header className="space-y-4">
+      <main id="main" className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
+        {/* ---------- hero ---------- */}
+        <section aria-label="Summary" aria-live="polite" aria-busy={pending} className="grid gap-8 py-10 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+          <div className="min-w-0 space-y-5">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-fg-2">
               {isSample && <Badge tone="blue">Sample</Badge>}
               <span>{dateFmt.format(new Date(session.createdAt))}</span>
               <span aria-hidden>·</span>
-              <span>{durationLabel(discussionMs)} discussion</span>
+              <span className="tabular-nums">{durationLabel(discussionMs)} discussion</span>
               <span aria-hidden>·</span>
               <span>{cfg.personas.length} AI participants</span>
               <span aria-hidden>·</span>
               <span>{cfg.language === "hinglish" ? "Hinglish" : "English"}</span>
               {session.inputMode === "typed" && <Badge>Typed Session</Badge>}
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight text-balance break-words text-fg sm:text-3xl">{cfg.topic}</h1>
-            <p className="text-[13px] text-fg-3">
-              With {cfg.personas.map((p) => `${PERSONAS[p].name} (${PERSONAS[p].archetype})`).join(", ")}
-              {cfg.focus ? ` · Focus: ${cfg.focus}` : ""}
-            </p>
-            {actions(true)}
-          </header>
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight text-balance break-words text-fg sm:text-3xl">{cfg.topic}</h1>
+              <p className="mt-2 text-[13px] text-pretty text-fg-3">
+                With {cfg.personas.map((p) => `${PERSONAS[p].name} (${PERSONAS[p].archetype})`).join(", ")}
+                {cfg.focus ? ` · Focus: ${cfg.focus}` : ""}
+              </p>
+            </div>
 
-          {/* overview */}
-          <section aria-labelledby="overview" aria-live="polite" aria-busy={pending}>
-            <h2 id="overview" className="sr-only">
-              Overview
-            </h2>
             {!spoke ? (
-              <Card className="p-6">
-                <h3 className="text-base font-semibold text-fg">You didn&apos;t speak this time</h3>
+              <Card className="p-5">
+                <h2 className="text-base font-semibold text-fg">You didn&apos;t speak this time</h2>
                 <p className="mt-1 max-w-prose text-sm text-pretty text-fg-2">
-                  There&apos;s nothing to score yet. Next time, open with a one-line definition of the topic in the first minute, then give your position.
-                  The missed openings below show moments you could have come in.
+                  There&apos;s nothing to score yet. Next time, open with a one-line definition of the topic in the first minute, then give your
+                  position. The moments below show where you could have come in.
                 </p>
-                <Button variant="primary" className="mt-4" onClick={() => practise(BY_KEY.initiation.focus)}>
+                <Button variant="primary" className="mt-4" onClick={() => practise(CRITERION.initiation.focus)}>
                   Try Again (Same Topic)
                 </Button>
               </Card>
             ) : report ? (
-              <Card className="grid gap-6 p-6 sm:grid-cols-[auto_1fr]">
-                <div className="sm:border-r sm:border-line sm:pr-8">
-                  <div className="text-[13px] text-fg-2">Readiness</div>
-                  <div data-testid="readiness" className="mt-1 text-5xl font-semibold tracking-tight text-fg tabular-nums">
-                    {report.readiness}
-                    <span className="text-lg font-normal text-fg-3">/100</span>
-                  </div>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[13px] text-fg-2">Focus Next Time</div>
-                  <p className="mt-1 text-base leading-snug text-pretty text-fg">{bo?.text}</p>
-                  {boUtt && (
-                    <Button variant="ghost" size="sm" className="mt-1 -ml-2 h-7 px-2" onClick={() => jump(boUtt.id)}>
-                      Go to {fmtTime(boUtt.start)}
-                      <ArrowIcon />
-                    </Button>
-                  )}
-                  {report.summary && <p className="mt-3 text-sm leading-relaxed text-pretty text-fg-2">{report.summary}</p>}
-                  {report.source === "heuristic" && (
-                    <div className="mt-4 flex flex-wrap items-center gap-3">
-                      <Badge>{demoMode || isSample ? "Demo Mode: Rule-Based Feedback" : "Rule-Based Feedback"}</Badge>
-                      {showRetryAi && (
-                        <Button data-testid="retry-feedback" variant="secondary" size="sm" onClick={retry} disabled={loading}>
-                          {loading && <Spinner className="size-3.5" />}
-                          {loading ? "Retrying…" : "Retry with AI"}
+              <>
+                {report.summary && <p className="max-w-prose text-[15px] leading-relaxed text-pretty text-fg-2">{report.summary}</p>}
+                {heuristicNote}
+                {bo?.text && (
+                  <div className="rounded-xl border border-line-2 bg-surface p-5">
+                    <div className="text-xs font-medium tracking-wide text-fg-3 uppercase">Focus Next Time</div>
+                    <p className="mt-2 text-base leading-snug text-pretty text-fg">{bo.text}</p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {boUtt && (
+                        <Button variant="secondary" size="sm" onClick={() => goToMoment(boUtt.id)}>
+                          Go to Moment · {fmtTime(boUtt.start)}
+                          <ArrowIcon />
+                        </Button>
+                      )}
+                      {!demo && focusCriterion && (
+                        <Button variant="ghost" size="sm" onClick={() => practise(CRITERION[focusCriterion].focus)}>
+                          Practise This
                         </Button>
                       )}
                     </div>
-                  )}
-                </div>
-              </Card>
+                  </div>
+                )}
+              </>
             ) : fetchError && !loading ? (
               <Notice tone="warn" className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <span>Feedback didn&apos;t load. Your numbers below are still accurate. Check your connection, then retry.</span>
@@ -332,170 +385,145 @@ export default function ReportView({ id }: { id: string }) {
                 </Button>
               </Notice>
             ) : (
-              <Card className="p-6">
+              <div className="space-y-3">
                 <p className="flex items-center gap-2 text-sm text-fg-2">
                   <Spinner />
                   Analysing your discussion…
                 </p>
-                <Skeleton className="mt-4 h-16" />
-              </Card>
-            )}
-          </section>
-
-          {/* scores */}
-          {spoke && (
-            <section aria-labelledby="scores">
-              <h2 id="scores" className="sr-only">
-                Scores
-              </h2>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-                {CRITERIA.map((c) =>
-                  report ? (
-                    <Card key={c.key} className="p-4">
-                      <div data-testid={`score-${c.key}`}>
-                        <div className="line-clamp-2 min-h-9 text-[13px] leading-tight text-fg-2">{c.label}</div>
-                        <div className="mt-2 text-2xl font-semibold tracking-tight text-fg tabular-nums">
-                          {report.scores[c.key]}
-                          <span className="text-sm font-normal text-fg-3">/5</span>
-                        </div>
-                        <div aria-hidden className="mt-2 flex gap-0.5">
-                          {[1, 2, 3, 4, 5].map((i) => (
-                            <span key={i} className={`h-1 flex-1 rounded-full ${i <= report.scores[c.key] ? "bg-fg" : "bg-surface-3"}`} />
-                          ))}
-                        </div>
-                      </div>
-                    </Card>
-                  ) : (
-                    <Skeleton key={c.key} className="h-[104px]" />
-                  ),
-                )}
+                <Skeleton className="h-4 w-4/5" />
+                <Skeleton className="h-4 w-3/5" />
+                <Skeleton className="mt-2 h-28" />
               </div>
-            </section>
-          )}
+            )}
+          </div>
 
-          {/* C1 */}
-          <section aria-labelledby="timeline">
-            <SectionHeading id="timeline" title="Who Spoke When" />
-            <Timeline session={session} metrics={metrics} onJump={jump} />
-          </section>
-
-          {/* C3 */}
-          {spoke && (
-            <section aria-labelledby="numbers">
-              <SectionHeading id="numbers" title="Your Numbers" hint="The shaded band on each bar is the healthy range." />
-              <MetricTiles m={metrics} discussionMs={discussionMs} />
-            </section>
-          )}
-
-          {/* C2 */}
-          {spoke && (
-            <section aria-labelledby="feedback">
-              <SectionHeading
-                id="feedback"
-                title="Feedback"
-                hint={
-                  session.inputMode === "typed"
-                    ? "Every point links to a moment in the transcript. This was a typed session, so there is no recording of you."
-                    : session.hasAudio
-                      ? "Every point links to a moment in the transcript. Replay plays that moment back."
-                      : "Every point links to a moment in the transcript. There is no recording of your voice for this session."
-                }
-              />
-              {pending && (
-                <div className="grid gap-3 md:grid-cols-2">
-                  {[0, 1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-44" />
-                  ))}
+          <Card className="rounded-2xl p-5">
+            {spoke ? (
+              <>
+                <ReadinessGauge value={report ? report.readiness : null} delta={delta} className="mx-auto w-full max-w-[240px]" />
+                <p className="mt-2 text-center text-[13px] text-fg-3">
+                  {report ? "Readiness for a placement GD" : fetchError && !loading ? "Score unavailable until feedback loads" : "Scoring…"}
+                </p>
+              </>
+            ) : (
+              <div className="grid min-h-48 place-items-center text-center">
+                <div>
+                  <div className="text-sm text-fg">Not scored</div>
+                  <p className="mt-1 text-[13px] text-fg-3">Speak at least once to get a readiness score.</p>
                 </div>
-              )}
-              {report && feedback.length === 0 && (
-                <Card className="p-5 text-sm text-fg-2">No feedback points for this session.</Card>
-              )}
-              <div className="grid gap-3 md:grid-cols-2">
-                {feedback.map((f, i) => {
-                  const u = byId.get(f.utteranceId);
-                  if (!u) return null;
-                  return (
-                    <Card key={i} className="flex flex-col p-5">
-                      <article data-testid="feedback-card" className="flex flex-1 flex-col">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <h3 className="text-[13px] text-fg-2">{BY_KEY[f.criterion].label}</h3>
-                          <Badge tone={f.verdict === "good" ? "ok" : "warn"}>{f.verdict === "good" ? "Working Well" : "Try Next Time"}</Badge>
-                        </div>
-                        <p className="mb-3 text-sm leading-relaxed text-pretty text-fg">{f.point}</p>
-                        {quoteBlock(u, f.quote)}
-                        {f.couldHaveSaid && (
-                          <div className="mt-3 rounded-md border border-line bg-surface-2 p-3">
-                            <div className="text-xs text-fg-3">Try Saying</div>
-                            <p className="mt-1 text-sm leading-relaxed text-pretty text-fg">&ldquo;{f.couldHaveSaid}&rdquo;</p>
-                          </div>
-                        )}
-                        {f.verdict === "try" && (
-                          <div className="mt-auto pt-4">
-                            <Button variant="secondary" size="sm" onClick={() => practise(BY_KEY[f.criterion].focus)}>
-                              Practise This
-                            </Button>
-                          </div>
-                        )}
-                      </article>
-                    </Card>
-                  );
-                })}
               </div>
-            </section>
-          )}
-
-          {/* C4 */}
-          <section aria-labelledby="missed">
-            <SectionHeading id="missed" title="Missed Openings" hint="Moments where you could have come in." />
-            {pending && <Skeleton className="h-28" />}
-            {report && report.missedOpenings.length === 0 && (
-              <Card className="p-5 text-sm text-fg-2">No missed openings. You came in when it counted.</Card>
             )}
-            {!report && fetchError && !loading && <Card className="p-5 text-sm text-fg-2">Missed openings appear once feedback loads.</Card>}
-            {report && report.missedOpenings.length > 0 && (
-              <Card className="divide-y divide-line overflow-hidden">
-                {report.missedOpenings.map((m, i) => (
-                  <div key={i} data-testid="missed-opening" className="grid gap-3 p-5 text-sm sm:grid-cols-[96px_1fr_1fr] sm:gap-6">
-                    <div>
-                      <Button variant="ghost" size="sm" className="-ml-2 h-7 px-2 font-mono tabular-nums" onClick={() => jump(m.afterUtteranceId)}>
-                        {fmtTime(m.at)}
-                      </Button>
-                      <div className="mt-0.5 text-xs text-fg-3">{m.reason}</div>
-                    </div>
-                    <p className="text-pretty break-words text-fg-2">{m.context}</p>
-                    <div>
-                      <div className="text-xs text-fg-3">Try Saying</div>
-                      <p className="mt-1 text-pretty text-fg">&ldquo;{m.suggestion}&rdquo;</p>
-                    </div>
-                  </div>
-                ))}
+          </Card>
+        </section>
+
+        {/* ---------- overview ---------- */}
+        {spoke && (
+          <section id="overview" aria-labelledby="overview-heading" className="scroll-mt-28 border-t border-line pt-10">
+            <SectionHeading id="overview" title="Overview" hint="Six skills placement panels look for, scored out of 5." />
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+              <Card className="rounded-2xl p-4">
+                <SkillsRadar scores={report?.scores ?? null} className="w-full" />
               </Card>
-            )}
-          </section>
-
-          {/* next steps */}
-          <section aria-labelledby="next" className="flex flex-wrap items-center justify-between gap-4 border-t border-line pt-8">
-            <div>
-              <h2 id="next" className="text-base font-semibold tracking-tight text-fg">
-                Go Again
-              </h2>
-              <p className="mt-1 text-[13px] text-fg-2">Same topic and panel, or start fresh.</p>
+              <Card className="rounded-2xl">
+                <ul className="divide-y divide-line">
+                  {CRITERIA.map((c) => {
+                    const v = report?.scores[c.key];
+                    return (
+                      <li key={c.key} data-testid={`score-${c.key}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-5 py-3.5 sm:grid-cols-[minmax(0,1fr)_120px_48px]">
+                        <span className="min-w-0 text-sm text-fg">{c.label}</span>
+                        {v === undefined ? (
+                          <Skeleton className="col-span-2 h-2 sm:col-span-1" />
+                        ) : (
+                          <>
+                            <span aria-hidden className="order-3 col-span-2 flex gap-1 sm:order-none sm:col-span-1">
+                              {[1, 2, 3, 4, 5].map((i) => (
+                                <span key={i} className={`h-1.5 flex-1 rounded-full ${i <= v ? (v <= 2 ? "bg-warn" : "bg-fg") : "bg-surface-3"}`} />
+                              ))}
+                            </span>
+                            <span className="text-right font-mono text-sm text-fg tabular-nums">
+                              {v}
+                              <span className="text-fg-3">/5</span>
+                            </span>
+                          </>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Card>
             </div>
-            {actions(false)}
           </section>
+        )}
 
-          <footer className="text-xs text-pretty text-fg-3">
-            All other participants were AI. Their statistics are generated and may be wrong. Scores are guidance, not a placement verdict.
-          </footer>
-        </div>
+        {/* ---------- moments ---------- */}
+        <section id="moments" aria-labelledby="moments-heading" className="mt-14 scroll-mt-28 border-t border-line pt-10">
+          <SectionHeading
+            id="moments"
+            title="Moments"
+            hint={
+              session.inputMode === "typed"
+                ? "The discussion in order: what worked, what to try next time and where you could have come in. This was a typed session, so there is no recording of you."
+                : session.hasAudio
+                  ? "The discussion in order: what worked, what to try next time and where you could have come in. Replay plays the moment back."
+                  : "The discussion in order: what worked, what to try next time and where you could have come in."
+            }
+          />
+          <Moments
+            session={session}
+            report={report}
+            loading={pending}
+            demo={demo}
+            onJump={jump}
+            onReplay={toggleReplay}
+            canReplay={replay.canReplay}
+            replayingId={replay.playingId}
+            onPractise={(c) => practise(CRITERION[c].focus)}
+          />
+          {!report && fetchError && !loading && (
+            <Card className="mt-3 p-5 text-sm text-fg-2">Moments appear once feedback loads.</Card>
+          )}
+        </section>
+
+        {/* ---------- speaking ---------- */}
+        <section id="speaking" aria-labelledby="speaking-heading" className="mt-14 scroll-mt-28 border-t border-line pt-10">
+          <SectionHeading id="speaking" title="Speaking" hint="Who held the floor, when, and your numbers against healthy ranges." />
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+            <Card className="rounded-2xl p-4">
+              <FloorShareFigure speakers={metrics.speakers} studentName={sn} fairShare={metrics.fairShare} className="w-full" />
+            </Card>
+            <Timeline session={session} metrics={metrics} onJump={jump} />
+          </div>
+          {spoke && (
+            <div className="mt-4">
+              <MetricTiles m={metrics} discussionMs={discussionMs} />
+            </div>
+          )}
+        </section>
+
+        {/* ---------- next steps ---------- */}
+        <section aria-labelledby="next" className="mt-14 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-surface p-6">
+          <div>
+            <h2 id="next" className="text-base font-semibold tracking-tight text-fg">
+              Go Again
+            </h2>
+            <p className="mt-1 text-[13px] text-fg-2">Same topic and panel, or start fresh.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/" className={buttonClass("secondary")}>
+              New Discussion
+            </Link>
+            <Button variant="primary" onClick={() => practise()}>
+              Practice Again
+            </Button>
+          </div>
+        </section>
+
+        <footer className="mt-8 text-xs text-pretty text-fg-3">
+          All other participants were AI. Their statistics are generated and may be wrong. Scores are guidance, not a placement verdict.
+        </footer>
       </main>
 
-      <aside aria-label="Transcript" className="border-t border-line bg-surface lg:sticky lg:top-0 lg:h-screen lg:border-t-0 lg:border-l">
-        <div className="h-[70vh] lg:h-full">
-          <Transcript session={session} highlightId={highlightId} />
-        </div>
-      </aside>
+      <TranscriptDrawer session={session} open={drawerOpen} onClose={() => setDrawerOpen(false)} highlightId={highlightId} />
     </div>
   );
 }
