@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { MicFigure } from "@/components/MicFigure";
 import { Button, Card, Segmented, Spinner, buttonClass } from "@/components/ui";
 import { MicError, openMic, type MicHandle } from "@/lib/audio/mic";
 import { Recognizer, sttSupported } from "@/lib/audio/stt";
@@ -92,7 +93,7 @@ export default function CheckPage() {
   const router = useRouter();
   const [config, setConfig] = useState<RoomConfig>(DEFAULT_CONFIG);
   const [micState, setMicState] = useState<MicState>("idle");
-  const [level, setLevel] = useState(0);
+  const [live, setLive] = useState<MicHandle | null>(null); // open mic, drives the figure
   const [heard, setHeard] = useState("");
   const [sttSupport, setSttSupport] = useState<boolean | null>(null);
   const [sttBlocked, setSttBlocked] = useState(false);
@@ -102,7 +103,6 @@ export default function CheckPage() {
 
   const micRef = useRef<MicHandle | null>(null);
   const recRef = useRef<Recognizer | null>(null);
-  const rafRef = useRef<number | null>(null);
   const handleRef = useRef<SpeakHandle | null>(null);
   const cancelledRef = useRef(false);
 
@@ -122,8 +122,7 @@ export default function CheckPage() {
 
   function cleanup() {
     cancelledRef.current = true;
-    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
+    setLive(null);
     recRef.current?.stop();
     recRef.current = null;
     micRef.current?.stop();
@@ -144,11 +143,7 @@ export default function CheckPage() {
       const mic = await openMic();
       micRef.current = mic;
       setMicState("ok");
-      const loop = () => {
-        setLevel(mic.level());
-        rafRef.current = requestAnimationFrame(loop);
-      };
-      loop();
+      setLive(mic);
       if (sttSupported()) {
         let finals = "";
         const rec = new Recognizer({
@@ -224,7 +219,7 @@ export default function CheckPage() {
     ok: {
       status: "ok",
       title: "Microphone on",
-      detail: "Speak and watch the level move.",
+      detail: "Speak and watch the rings move.",
     },
     denied: {
       status: "bad",
@@ -249,146 +244,163 @@ export default function CheckPage() {
   };
   const m = mic[micState];
 
+  const figureCaption =
+    micState === "ok"
+      ? "The rings move with your voice and turn green when you speak."
+      : micBad
+        ? "No microphone input."
+        : "Select Test Microphone, then say a sentence.";
+
   return (
-    <main id="main" className="mx-auto max-w-[480px] px-4 pt-10 pb-16 sm:pt-20">
-      <div className="mb-6 flex items-center justify-between">
-        <Link href="/" className={buttonClass("ghost", "sm", "-ml-2.5")}>
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M10 3 5 8l5 5" />
-          </svg>
-          Setup
-        </Link>
-        <span className="text-xs text-fg-3 tabular-nums">Step 2 of 3</span>
-      </div>
-
-      <h1 className="text-2xl font-semibold tracking-tight text-balance">Check Your Mic</h1>
-      <p className="mt-1.5 text-fg-2 text-pretty">Select Test Microphone and say a sentence out loud.</p>
-
-      {/* ---------- microphone ---------- */}
-      <Card className="mt-6">
-        <div className={`flex items-start gap-3 px-5 pt-5 ${micBad ? "pb-5" : ""}`}>
-          <StatusIcon status={m.status} />
-          <div className="min-w-0 flex-1" role="status" aria-live="polite">
-            <div className="text-sm text-fg">{m.title}</div>
-            <div className="mt-0.5 text-[13px] text-fg-2 text-pretty">{m.detail}</div>
-          </div>
-          <Button
-            size="sm"
-            variant={micState === "idle" || micBad ? "primary" : "secondary"}
-            data-testid="test-mic"
-            onClick={testMic}
-            disabled={micState === "requesting" || micState === "ok"}
-          >
-            {micState === "ok"
-              ? "Microphone On"
-              : micState === "requesting"
-                ? "Requesting…"
-                : micBad
-                  ? "Try Again"
-                  : "Test Microphone"}
-          </Button>
+    <div className="min-h-screen">
+      <header className="sticky top-0 z-20 border-b border-line bg-canvas/80 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
+          <span className="text-[15px] font-semibold tracking-tight" translate="no">
+            GD Floor
+          </span>
+          <span className="text-xs text-fg-3 tabular-nums">Step 2 of 3</span>
         </div>
+      </header>
 
-        {!micBad && (
-          <div className="px-5 pt-4 pb-5">
-            <div className="h-1.5 overflow-hidden rounded-full bg-surface-3" aria-hidden="true">
-              <div
-                className="h-full origin-left rounded-full bg-ok transition-transform duration-75"
-                style={{
-                  transform: `scaleX(${micState === "ok" ? Math.min(1, level * 1.2) : 0})`,
-                }}
-              />
-            </div>
-            <div className="mt-3 flex min-h-5 items-start gap-2 text-[13px]" aria-live="polite">
-              {heard ? (
-                <>
-                  {heardEnough && <StatusIcon status="ok" />}
-                  <span className="min-w-0 break-words text-fg-2">
-                    {heardEnough ? "Heard you: " : ""}
-                    <span className="text-fg">“{heard}”</span>
-                  </span>
-                </>
-              ) : micState === "ok" && sttSupport ? (
-                <span className="text-fg-3">Listening…</span>
-              ) : null}
-            </div>
-          </div>
-        )}
-      </Card>
+      <main
+        id="main"
+        className="mx-auto grid max-w-5xl items-start gap-8 px-4 pt-8 pb-16 sm:px-6 sm:pt-12 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-12"
+      >
+        <div className="min-w-0">
+          <Link href="/?step=table" className={buttonClass("ghost", "sm", "-ml-2.5 mb-4")}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M10 3 5 8l5 5" />
+            </svg>
+            Setup
+          </Link>
 
-      {/* ---------- audio + environment ---------- */}
-      <Card className="mt-4 divide-y divide-line">
-        <div className="px-5 py-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-fg">What are you listening on?</div>
-            <Segmented
-              label="Audio output"
-              options={OUTPUTS}
-              value={output}
-              onChange={setOutput}
-              testId={(o) => `output-${o}`}
-              render={(o) => (o === "headphones" ? "Headphones" : "Laptop Speakers")}
-            />
-          </div>
-          <p className="mt-2 text-[13px] text-fg-2 text-pretty">
-            {output === "headphones"
-              ? "Speak over an AI any time to cut in."
-              : "The AIs can hear themselves through your mic, so press Space to cut in instead of speaking."}
-          </p>
-        </div>
+          <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">Check Your Mic</h1>
+          <p className="mt-1.5 text-fg-2 text-pretty">Select Test Microphone and say a sentence out loud.</p>
 
-        <Row
-          status={sttUnavailable ? "warn" : heard ? "ok" : "pending"}
-          title={sttUnavailable ? "Live captions unavailable" : "Live captions"}
-        >
-          {sttUnavailable
-            ? "Live captions need Chrome or Edge. You can still type your points."
-            : heard
-              ? "Your words appear on screen as you speak."
-              : micBad
-                ? "Needs microphone access."
-                : "Starts when you test your microphone."}
-        </Row>
-
-        <Row
-          status={voiceCount === null ? "busy" : voiceCount > 0 ? "ok" : "warn"}
-          title={voiceCount === null ? "Loading voices…" : voiceCount > 0 ? "Voices ready" : "No voices"}
-          action={
-            voiceCount ? (
-              <Button size="sm" variant="ghost" onClick={playSample} aria-label={playing ? "Stop Sample" : "Play Sample"}>
-                <PlayIcon playing={playing} />
-                {playing ? "Stop" : "Play Sample"}
+          {/* ---------- microphone ---------- */}
+          <Card className="mt-6">
+            <div className="flex items-start gap-3 p-5">
+              <StatusIcon status={m.status} />
+              <div className="min-w-0 flex-1" role="status" aria-live="polite">
+                <div className="text-sm text-fg">{m.title}</div>
+                <div className="mt-0.5 text-[13px] text-fg-2 text-pretty">{m.detail}</div>
+              </div>
+              <Button
+                size="sm"
+                variant={micState === "idle" || micBad ? "primary" : "secondary"}
+                data-testid="test-mic"
+                onClick={testMic}
+                disabled={micState === "requesting" || micState === "ok"}
+              >
+                {micState === "ok"
+                  ? "Microphone On"
+                  : micState === "requesting"
+                    ? "Requesting…"
+                    : micBad
+                      ? "Try Again"
+                      : "Test Microphone"}
               </Button>
-            ) : undefined
-          }
-        >
-          {voiceCount === 0 ? "No voices in this browser. AI lines will show as captions." : null}
-        </Row>
-      </Card>
+            </div>
 
-      <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Button variant={micBad ? "primary" : "secondary"} data-testid="continue-typing" onClick={() => leave("typed")}>
-          Use Keyboard Instead
-        </Button>
-        <Button
-          variant={micBad ? "secondary" : "primary"}
-          data-testid="take-seat"
-          onClick={() => leave("voice")}
-          disabled={!canJoin || leaving}
-        >
-          {leaving ? "Joining…" : "Join Room"}
-        </Button>
-      </div>
-    </main>
+            {micState === "ok" && (
+              <div className="flex min-h-5 items-start gap-2 border-t border-line px-5 py-3.5 text-[13px]" aria-live="polite">
+                {heard ? (
+                  <>
+                    {heardEnough && <StatusIcon status="ok" />}
+                    <span className="min-w-0 break-words text-fg-2">
+                      {heardEnough ? "Heard you: " : ""}
+                      <span className="text-fg">“{heard}”</span>
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-fg-3">{sttSupport ? "Listening…" : "Speak and watch the rings move."}</span>
+                )}
+              </div>
+            )}
+          </Card>
+
+          {/* ---------- audio + environment ---------- */}
+          <Card className="mt-4 divide-y divide-line">
+            <div className="px-5 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm text-fg">What are you listening on?</div>
+                <Segmented
+                  label="Audio output"
+                  options={OUTPUTS}
+                  value={output}
+                  onChange={setOutput}
+                  testId={(o) => `output-${o}`}
+                  render={(o) => (o === "headphones" ? "Headphones" : "Laptop Speakers")}
+                />
+              </div>
+              <p className="mt-2 text-[13px] text-fg-2 text-pretty">
+                {output === "headphones"
+                  ? "Speak over an AI any time to cut in."
+                  : "The AIs can hear themselves through your mic, so press Space to cut in instead of speaking."}
+              </p>
+            </div>
+
+            <Row
+              status={sttUnavailable ? "warn" : heard ? "ok" : "pending"}
+              title={sttUnavailable ? "Live captions unavailable" : "Live captions"}
+            >
+              {sttUnavailable
+                ? "Live captions need Chrome or Edge. You can still type your points."
+                : heard
+                  ? "Your words appear on screen as you speak."
+                  : micBad
+                    ? "Needs microphone access."
+                    : "Starts when you test your microphone."}
+            </Row>
+
+            <Row
+              status={voiceCount === null ? "busy" : voiceCount > 0 ? "ok" : "warn"}
+              title={voiceCount === null ? "Loading voices…" : voiceCount > 0 ? "Voices ready" : "No voices"}
+              action={
+                voiceCount ? (
+                  <Button size="sm" variant="ghost" onClick={playSample} aria-label={playing ? "Stop Sample" : "Play Sample"}>
+                    <PlayIcon playing={playing} />
+                    {playing ? "Stop" : "Play Sample"}
+                  </Button>
+                ) : undefined
+              }
+            >
+              {voiceCount === 0 ? "No voices in this browser. AI lines will show as captions." : null}
+            </Row>
+          </Card>
+
+          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <Button variant={micBad ? "primary" : "secondary"} data-testid="continue-typing" onClick={() => leave("typed")}>
+              Use Keyboard Instead
+            </Button>
+            <Button
+              variant={micBad ? "secondary" : "primary"}
+              data-testid="take-seat"
+              onClick={() => leave("voice")}
+              disabled={!canJoin || leaving}
+            >
+              {leaving ? "Joining…" : "Join Room"}
+            </Button>
+          </div>
+        </div>
+
+        <aside className="animate-rise order-first lg:sticky lg:top-24 lg:order-none" style={{ animationDelay: "80ms" }}>
+          <figure className="rounded-2xl border border-line">
+            <MicFigure mic={live} blocked={micBad} className="mx-auto w-full max-w-[240px] lg:max-w-none" />
+            <figcaption className="border-t border-line px-5 py-3 text-[13px] text-fg-3">{figureCaption}</figcaption>
+          </figure>
+        </aside>
+      </main>
+    </div>
   );
 }

@@ -20,19 +20,24 @@ test.describe("setup page", () => {
     await page.getByRole("tab", { name: "Case-based" }).click();
     await expect(page.getByTestId("topic-option").filter({ hasText: "D2C snack brand" })).toBeVisible();
 
-    // Surprise me selects some topic (one option pressed or a different tab shown).
-    await page.getByTestId("surprise-me").click();
-    await expect(page.locator('[data-testid="topic-option"][aria-pressed="true"]')).toHaveCount(1);
-
-    // Custom topic validation.
+    // Custom topic validation: a too-short topic stays on step 1 with an inline error.
     const custom = page.getByTestId("custom-topic-input");
     await custom.fill("ab");
+    await custom.press("Enter");
     await expect(page.getByText(/at least 4 characters/i)).toBeVisible();
-    await expect(page.getByTestId("enter-room")).toBeDisabled();
+    await expect(page.getByTestId("persona-card-arjun")).toHaveCount(0);
+
+    // A valid custom topic reveals the panel + settings with that topic in the header.
     await custom.fill("Should exams be open book?");
-    await expect(page.getByText(/at least 4 characters/i)).toHaveCount(0);
-    await expect(page.getByTestId("enter-room")).toBeEnabled();
-    await custom.fill("");
+    await custom.press("Enter");
+    await expect(page.getByText("Should exams be open book?")).toBeVisible();
+    await expect(page.getByTestId("persona-card-arjun")).toBeVisible();
+
+    // Change goes back to the topic list; Surprise me picks a topic and moves on.
+    await page.getByTestId("topic-change").click();
+    await expect(page.getByTestId("topic-option").first()).toBeVisible();
+    await page.getByTestId("surprise-me").click();
+    await expect(page.getByTestId("topic-change")).toBeVisible();
 
     // Panel size 3: can't go below 3.
     await page.getByTestId("panel-size-3").click();

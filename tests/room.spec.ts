@@ -133,6 +133,7 @@ test.describe("microphone denied", () => {
 
   test("mic check explains the block and offers typing", async ({ page }) => {
     await page.goto("/");
+    await page.getByTestId("topic-option").first().click();
     await page.getByTestId("enter-room").click();
     await expect(page).toHaveURL(/\/check$/);
     await page.getByTestId("test-mic").click();
@@ -145,6 +146,7 @@ test.describe("microphone denied", () => {
   test("room falls back to typing when the mic is denied mid-join", async ({ page }) => {
     await noHmr(page);
     await page.goto("/");
+    await page.getByTestId("topic-option").first().click();
     await page.getByTestId("panel-size-3").click();
     await page.getByTestId("enter-room").click();
     await expect(page).toHaveURL(/\/check$/);

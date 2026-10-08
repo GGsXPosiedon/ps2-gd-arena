@@ -1,13 +1,14 @@
-import { synthesize, TtsError, ttsEnabled } from "@/lib/server/tts";
+import { TtsError } from "@/lib/server/tts";
+import { synthesizeSeat, voiceProvider } from "@/lib/server/voices";
 import type { Language, SpeakerId } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 const SEATS = new Set<SpeakerId>(["mod", "arjun", "priya", "meera", "rohan", "ananya", "kabir"]);
 
-// POST {speaker, text, language} -> audio/wav (Gemini TTS). Only when TTS_PROVIDER=gemini.
+// POST {speaker, text, language} -> audio (Sarvam, Google Cloud TTS or Gemini, per TTS_PROVIDER).
 export async function POST(request: Request) {
-  if (!ttsEnabled()) return Response.json({ error: "Cloud TTS is not enabled" }, { status: 404 });
+  if (!voiceProvider()) return Response.json({ error: "Cloud TTS is not enabled" }, { status: 404 });
 
   let speaker: SpeakerId;
   let text: string;
@@ -23,9 +24,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const wav = await synthesize(speaker as Exclude<SpeakerId, "you">, text, language);
-    return new Response(new Blob([wav as BlobPart], { type: "audio/wav" }), {
-      headers: { "content-type": "audio/wav", "cache-control": "no-store" },
+    const { bytes, mime } = await synthesizeSeat(speaker as Exclude<SpeakerId, "you">, text, language);
+    return new Response(new Blob([bytes as BlobPart], { type: mime }), {
+      headers: { "content-type": mime, "cache-control": "no-store" },
     });
   } catch (e) {
     const status = e instanceof TtsError ? e.status : (e as Error)?.name === "TimeoutError" ? 504 : 502;

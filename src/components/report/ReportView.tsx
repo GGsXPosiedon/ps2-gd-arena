@@ -247,7 +247,7 @@ export default function ReportView({ id }: { id: string }) {
       <main id="main" className="min-w-0">
         <div className="flex h-14 items-center justify-between border-b border-line px-5 sm:px-8">
           <Link href="/" className="rounded-sm text-sm font-semibold tracking-tight text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue">
-            Floor
+            GD Floor
           </Link>
           <Button variant="ghost" size="sm" onClick={() => exportTranscript(session)}>
             Export Transcript

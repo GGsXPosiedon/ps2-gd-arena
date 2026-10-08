@@ -6,7 +6,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Floor: GD practice room",
+  title: "GD Floor: group discussion practice",
   description: "Practise a group discussion with AI participants and get feedback tied to what you said.",
 };
 

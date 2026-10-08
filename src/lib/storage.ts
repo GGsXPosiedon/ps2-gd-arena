@@ -28,6 +28,15 @@ export function loadConfig(): RoomConfig {
   }
 }
 
+/** True once the student has entered a room at least once (a config was saved). */
+export function hasSavedConfig(): boolean {
+  try {
+    return !!localStorage.getItem(CONFIG_KEY);
+  } catch {
+    return false;
+  }
+}
+
 export function saveConfig(config: RoomConfig) {
   localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
 }

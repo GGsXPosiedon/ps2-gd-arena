@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { AiTag, Avatar } from "@/components/Avatar";
+import { TableFigure } from "@/components/TableFigure";
 import { Button, Kbd, Spinner, buttonClass } from "@/components/ui";
-import { PERSONAS } from "@/lib/personas";
+import { PERSONAS, speakerColor } from "@/lib/personas";
 import type { RoomConfig } from "@/lib/types";
 
 export function Lobby({
@@ -37,77 +37,72 @@ export function Lobby({
   ];
 
   return (
-    <div className="flex min-h-full items-center justify-center py-8">
-      <div className="w-full max-w-lg rounded-xl border border-line bg-surface p-6">
+    <div className="flex min-h-full items-center justify-center py-6">
+      <div className="w-full max-w-3xl">
         <p className="text-xs text-fg-3">{meta}</p>
-        <h1 className="mt-1.5 text-xl leading-snug font-semibold text-balance text-fg">{config.topic}</h1>
-
+        <h1 className="mt-1.5 text-xl leading-snug font-semibold tracking-tight text-balance text-fg sm:text-2xl">{config.topic}</h1>
         {config.focus && (
-          <p className="mt-3 rounded-md border border-line px-3 py-2 text-[13px] text-fg-2">
+          <p className="mt-3 inline-block rounded-md border border-line px-3 py-1.5 text-[13px] text-fg-2">
             <span className="text-fg">Focus:</span> {config.focus}
           </p>
         )}
 
-        <ul className="mt-5 grid grid-cols-2 gap-x-4 gap-y-2.5" aria-label="Panel">
-          <li className="flex min-w-0 items-center gap-2.5">
-            <Avatar speaker="mod" size={28} />
-            <div className="min-w-0 leading-tight">
-              <div className="flex items-center text-[13px] text-fg">
-                Moderator
-                <AiTag />
+        <div className="mt-5 grid gap-5 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+          {/* the table */}
+          <figure className="animate-rise overflow-hidden rounded-2xl border border-line bg-canvas" style={{ animationDelay: "60ms" }}>
+            <TableFigure personas={config.personas} studentName={config.studentName} className="mx-auto w-full max-w-[280px] md:max-w-none" />
+            <figcaption className="border-t border-line px-4 py-3">
+              <ul className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs" aria-label="Panel">
+                {config.personas.map((id) => (
+                  <li key={id} className="flex items-center gap-1.5 text-fg-2">
+                    <span className="size-2 rounded-full" style={{ background: speakerColor(id) }} aria-hidden="true" />
+                    {PERSONAS[id].name}
+                    <span className="text-fg-3">{PERSONAS[id].archetype}</span>
+                  </li>
+                ))}
+              </ul>
+            </figcaption>
+          </figure>
+
+          {/* how it works + start */}
+          <div className="animate-rise flex min-w-0 flex-col rounded-2xl border border-line bg-surface p-5" style={{ animationDelay: "140ms" }}>
+            <h2 className="text-sm font-medium text-fg">How It Works</h2>
+            <ol className="mt-3 space-y-3 text-[13px] text-fg-2">
+              {steps.map((s, i) => (
+                <li key={i} className="flex gap-2.5">
+                  <span className="grid size-5 shrink-0 place-items-center rounded-full border border-line-2 font-mono text-[11px] text-fg-3 tabular-nums">
+                    {i + 1}
+                  </span>
+                  <span className="pt-px text-pretty">{s}</span>
+                </li>
+              ))}
+            </ol>
+
+            <p className="mt-4 text-xs text-fg-3 text-pretty">Everyone else here is an AI. Their opinions and statistics are made up and may be wrong.</p>
+
+            <div className="mt-auto pt-5">
+              <Button variant="primary" size="lg" data-testid="join-voice" onClick={onJoin} disabled={starting} className="w-full">
+                {starting && <Spinner className="border-canvas/30 border-t-canvas" />}
+                {starting ? "Starting…" : "Start Discussion"}
+              </Button>
+              <div className="mt-2 flex items-center justify-between gap-2 text-xs text-fg-3">
+                <span className="truncate">
+                  Input: <span className="text-fg-2">{typed ? "Keyboard" : speakerMode ? "Mic (speaker mode)" : "Mic"}</span>
+                </span>
+                <span className="flex shrink-0">
+                  <Link href="/check" className={buttonClass("ghost", "sm", "h-7 px-2 text-xs")}>
+                    Change Input
+                  </Link>
+                  <Link href="/?step=table" className={buttonClass("ghost", "sm", "h-7 px-2 text-xs")}>
+                    Back to Setup
+                  </Link>
+                </span>
               </div>
-              <div className="truncate text-xs text-fg-3">Keeps time</div>
             </div>
-          </li>
-          {config.personas.map((id) => (
-            <li key={id} className="flex min-w-0 items-center gap-2.5">
-              <Avatar speaker={id} size={28} />
-              <div className="min-w-0 leading-tight">
-                <div className="flex items-center text-[13px] text-fg">
-                  {PERSONAS[id].name}
-                  <AiTag />
-                </div>
-                <div className="truncate text-xs text-fg-3">{PERSONAS[id].archetype}</div>
-              </div>
-            </li>
-          ))}
-        </ul>
-
-        <h2 className="mt-6 text-sm font-medium text-fg">How It Works</h2>
-        <ol className="mt-2 space-y-2 text-[13px] text-fg-2">
-          {steps.map((s, i) => (
-            <li key={i} className="flex gap-2.5">
-              <span className="grid size-5 shrink-0 place-items-center rounded-full border border-line-2 font-mono text-[11px] text-fg-3 tabular-nums">
-                {i + 1}
-              </span>
-              <span className="pt-px text-pretty">{s}</span>
-            </li>
-          ))}
-        </ol>
-
-        <p className="mt-5 text-xs text-fg-3">Everyone else here is an AI. Their opinions and statistics are made up and may be wrong.</p>
-
-        <div className="mt-5 flex flex-col gap-2">
-          <Button variant="primary" size="lg" data-testid="join-voice" onClick={onJoin} disabled={starting} className="w-full">
-            {starting && <Spinner className="border-canvas/30 border-t-canvas" />}
-            {starting ? "Starting…" : "Start Discussion"}
-          </Button>
-          <div className="flex items-center justify-between text-xs text-fg-3">
-            <span>
-              Input: <span className="text-fg-2">{typed ? "Keyboard" : speakerMode ? "Mic (speaker mode)" : "Mic"}</span>
-            </span>
-            <span className="flex gap-1">
-              <Link href="/check" className={buttonClass("ghost", "sm", "h-7 px-2 text-xs")}>
-                Change Input
-              </Link>
-              <Link href="/" className={buttonClass("ghost", "sm", "h-7 px-2 text-xs")}>
-                Back to Setup
-              </Link>
-            </span>
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-line pt-4 text-xs text-fg-3 [@media(pointer:coarse)]:hidden">
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-fg-3 [@media(pointer:coarse)]:hidden">
           {!typed && !speakerMode && <span>Wear headphones so the AIs don’t hear themselves.</span>}
           <span className="flex items-center gap-1.5">
             <Kbd>Space</Kbd> Interrupt

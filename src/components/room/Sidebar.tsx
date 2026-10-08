@@ -32,7 +32,7 @@ export function Sidebar({ config, state, onToggleMute }: { config: RoomConfig; s
     <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-canvas md:flex" aria-label="Participants and phases">
       <header className="flex h-12 shrink-0 items-center border-b border-line px-4">
         <span className="text-sm font-medium text-fg" translate="no">
-          Floor
+          GD Floor
         </span>
       </header>
 

@@ -77,6 +77,7 @@ test("speech is committed once: a growing recognizer result is never saved twice
   await noHmr(page);
   await fakeVoice(page);
   await page.goto("/?e2e=1");
+  await page.getByTestId("topic-option").first().click();
   await page.getByTestId("panel-size-3").click();
   await page.getByTestId("enter-room").click();
   await page.getByTestId("take-seat").click();

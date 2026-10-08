@@ -57,6 +57,49 @@ body {
   scrollbar-color: var(--color-line-2) transparent;
 }
 
+/* Entrance for revealed sections: opacity + transform only. Delay via style={{ animationDelay }}. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-rise {
+  animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Table figure: the reply line draws itself from one speaker to the next. */
+@keyframes tf-draw {
+  from {
+    stroke-dashoffset: 300;
+    opacity: 0;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+.tf-draw {
+  animation: tf-draw 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Setup page: the chosen topic morphs between the topic list and the header (View Transitions API). */
+::view-transition-group(topic) {
+  animation-duration: 0.45s;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.25s;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

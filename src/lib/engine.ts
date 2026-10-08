@@ -563,7 +563,9 @@ export class GDEngine {
     this.set({ notice: `${PERSONAS[ai].name} is cutting in. Keep talking to hold the floor.` });
     const id = this.nextId();
     const start = this.now();
-    const handle = this.bank!.speak(ai, line, (c) => this.set({ live: { id, speaker: ai, text: line, shown: c } }));
+    const handle = this.bank!.speak(ai, line, (c) => {
+      if (this.current?.id === id) this.set({ live: { id, speaker: ai, text: line, shown: c } });
+    });
     this.current = { handle, speaker: ai, id, interruptible: false };
     this.set({ live: { id, speaker: ai, text: line, shown: 0 } });
     // After 1.5 s: still talking? The AI yields. Otherwise the student ceded the floor.
@@ -641,7 +643,9 @@ export class GDEngine {
     this.currentStart = start;
     this.bargedIn = false;
     this.mic?.setSensitivity({ thresholdMul: 2.2, minSpeechMs: 350 });
-    const handle = this.bank!.speak(speaker, text, (c) => this.set({ live: { id, speaker, text, shown: c } }));
+    const handle = this.bank!.speak(speaker, text, (c) => {
+      if (this.current?.id === id) this.set({ live: { id, speaker, text, shown: c } });
+    });
     this.current = { handle, speaker, id, interruptible: opts.interruptible ?? speaker !== "mod" };
     this.set({ live: { id, speaker, text, shown: 0 }, thinking: null });
     opts.onStart?.(id);

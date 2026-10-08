@@ -21,8 +21,8 @@ interface VoiceSpec {
   pitch: number;
 }
 
-const FEMALE = /female|woman|veena|lekha|isha|neerja|swara|kalpana|heera|samantha|karen|moira|tessa|fiona|victoria|zira|aria|jenny|sonia|libby|google us english/i;
-const MALE = /\bmale\b|man\b|rishi|ravi|prabhat|hemant|madhur|daniel|alex|fred|tom|aaron|arthur|david|mark|guy|ryan|google uk english male/i;
+const FEMALE = /female|woman|veena|lekha|isha|neerja|swara|kalpana|heera|samantha|karen|moira|tessa|fiona|victoria|zira|aria|jenny|sonia|libby|google us english|aashi|ananya|kavya|neerja|swara/i;
+const MALE = /\bmale\b|man\b|rishi|ravi|prabhat|hemant|madhur|daniel|alex|fred|tom|aaron|arthur|david|mark|guy|ryan|google uk english male|aarav|kunal|rehaan/i;
 
 function genderOf(v: SpeechSynthesisVoice): "male" | "female" | "unknown" {
   if (/female/i.test(v.name)) return "female";
@@ -85,7 +85,8 @@ function chunkText(text: string, max: number): string[] {
 async function cloudTtsAvailable(): Promise<boolean> {
   try {
     const res = await fetch("/api/health", { signal: AbortSignal.timeout(2500) });
-    return res.ok && (await res.json())?.tts === "gemini";
+    const tts = res.ok ? (await res.json())?.tts : null;
+    return !!tts && tts !== "browser";
   } catch {
     return false;
   }
@@ -349,6 +350,16 @@ export class VoiceBank {
     };
     let sentenceStart = 0;
     let fallback: SpeakHandle | null = null;
+    // Timers live at this scope so stop() can clear them (a leaked progress timer kept
+    // re-announcing a cut-off line as if it were still playing).
+    let watchdog: ReturnType<typeof setTimeout> | null = null;
+    let estTimer: ReturnType<typeof setInterval> | null = null;
+    const clearTimers = () => {
+      if (watchdog) clearTimeout(watchdog);
+      if (estTimer) clearInterval(estTimer);
+      watchdog = null;
+      estTimer = null;
+    };
 
     const spokenSoFar = () => {
       const upTo = offset + current;
@@ -370,7 +381,8 @@ export class VoiceBank {
       let started = false;
       let gotBoundary = false;
       // Some voices never start (network voices offline etc.): fall back to a silent caption.
-      const watchdog = setTimeout(() => {
+      clearTimers();
+      watchdog = setTimeout(() => {
         if (started || stopped) return;
         speechSynthesis.cancel();
         const rest = sentences.slice(idx).join(" ");
@@ -380,10 +392,10 @@ export class VoiceBank {
         );
       }, 4000);
       // Estimate progress by time for voices without boundary events.
-      let estTimer: ReturnType<typeof setInterval> | null = null;
       u.onstart = () => {
+        if (stopped) return;
         started = true;
-        clearTimeout(watchdog);
+        if (watchdog) clearTimeout(watchdog);
         sentenceStart = performance.now();
         estTimer = setInterval(() => {
           if (gotBoundary) return;
@@ -393,13 +405,13 @@ export class VoiceBank {
         }, 120);
       };
       u.onboundary = (e) => {
+        if (stopped) return;
         gotBoundary = true;
         current = e.charIndex;
         onProgress?.(offset + current);
       };
       const next = () => {
-        clearTimeout(watchdog);
-        if (estTimer) clearInterval(estTimer);
+        clearTimers();
         if (stopped || settled) return;
         offset += s.length + 1;
         current = 0;
@@ -408,9 +420,8 @@ export class VoiceBank {
       };
       u.onend = next;
       u.onerror = (e) => {
+        clearTimers();
         if (stopped || e.error === "interrupted" || e.error === "canceled") return;
-        clearTimeout(watchdog);
-        if (estTimer) clearInterval(estTimer);
         // fall back to a caption for the rest of the line
         const rest = sentences.slice(idx).join(" ");
         fallback = this.speakSilent(rest, (c) => onProgress?.(offset + c), true);
@@ -431,6 +442,7 @@ export class VoiceBank {
       stop: () => {
         if (stopped || settled) return;
         stopped = true;
+        clearTimers();
         if (fallback) {
           fallback.stop();
           return;
