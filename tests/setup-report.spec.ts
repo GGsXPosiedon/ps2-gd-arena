@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { SAMPLE_SESSION } from "../src/lib/fixtures/sampleSession";
 import { noHmr, norm } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
@@ -109,9 +110,16 @@ test.describe("sample report", () => {
       if (calls > 1) body.summary = "Retried analysis summary.";
       await route.fulfill({ response: res, json: body });
     });
-    await page.goto("/report/sample");
+    // Retry is only offered for real sessions with a real AI provider (not the sample, not demo mode).
+    await page.route("**/api/health", (route) => route.fulfill({ json: { provider: "gemini", fast: "x", smart: "y", stt: "browser", tts: "browser" } }));
+    await page.goto("/");
+    await page.evaluate((s) => {
+      localStorage.setItem("floor:session:retry1", JSON.stringify({ ...s, id: "retry1", report: undefined }));
+      localStorage.setItem("floor:sessions", JSON.stringify(["retry1"]));
+    }, SAMPLE_SESSION);
+    await page.goto("/report/retry1");
     await expect(page.getByTestId("retry-feedback")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/Basic feedback/i)).toBeVisible();
+    await expect(page.getByText(/Rule-Based Feedback/i)).toBeVisible();
     await page.getByTestId("retry-feedback").click();
     await expect(page.getByText("Retried analysis summary.")).toBeVisible();
     await expect(page.getByTestId("retry-feedback")).toHaveCount(0);

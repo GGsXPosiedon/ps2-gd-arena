@@ -1,40 +1,59 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { GDEngine } from "@/lib/engine";
 import type { RoomConfig, SpeakerId } from "@/lib/types";
 import { Sidebar } from "./Sidebar";
-import { Stage } from "./Stage";
+import { Stage, yourTurn } from "./Stage";
 import { TranscriptPanel } from "./TranscriptPanel";
+
+const DESKTOP = "(min-width: 1024px)";
+
+function useMediaQuery(query: string) {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia(query);
+      mq.addEventListener("change", cb);
+      return () => mq.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(query).matches,
+    () => true,
+  );
+}
+
+function isTypingTarget(t: EventTarget | null) {
+  const el = t as HTMLElement | null;
+  return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+}
 
 export function RoomView({ engine, config, inputMode }: { engine: GDEngine; config: RoomConfig; inputMode: "voice" | "typed" }) {
   const router = useRouter();
   const state = useSyncExternalStore(engine.subscribe, engine.getState, engine.getState);
+  const isDesktop = useMediaQuery(DESKTOP);
   const [captionsOn, setCaptionsOn] = useState(config.captions);
-  const [chatOpen, setChatOpen] = useState(true);
+  const [chatPref, setChatPref] = useState<boolean | null>(null); // null = default for the screen size
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [cutOff, setCutOff] = useState<Partial<Record<SpeakerId, boolean>>>({});
-  const [closingStartedAt, setClosingStartedAt] = useState<number | null>(null);
+  const composerRef = useRef<HTMLInputElement>(null);
+  const chatOpen = chatPref ?? isDesktop;
+  const running = state.status === "running";
+  const typed = state.inputMode === "typed";
+  const speakerMode = engine.speakerMode;
 
-  // Track transient engine changes (cut-off flashes, closing-turn countdown start).
-  const seen = useRef({ count: 0, closing: false });
+  // Brief "Cut off" flag on a tile whose line was interrupted.
+  const seen = useRef(0);
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
     const unsub = engine.subscribe(() => {
-      const s = engine.getState();
-      if (s.utterances.length !== seen.current.count) {
-        const fresh = s.utterances.slice(seen.current.count);
-        seen.current.count = s.utterances.length;
-        for (const u of fresh) {
-          if (!u.interrupted) continue;
-          setCutOff((c) => ({ ...c, [u.speaker]: true }));
-          timers.push(setTimeout(() => setCutOff((c) => ({ ...c, [u.speaker]: false })), 2000));
-        }
-      }
-      if (s.yourClosingTurn !== seen.current.closing) {
-        seen.current.closing = s.yourClosingTurn;
-        setClosingStartedAt(s.yourClosingTurn ? Date.now() : null);
+      const list = engine.getState().utterances;
+      if (list.length === seen.current) return;
+      const fresh = list.slice(seen.current);
+      seen.current = list.length;
+      for (const u of fresh) {
+        if (!u.interrupted) continue;
+        setCutOff((c) => ({ ...c, [u.speaker]: true }));
+        timers.push(setTimeout(() => setCutOff((c) => ({ ...c, [u.speaker]: false })), 2000));
       }
     });
     return () => {
@@ -48,53 +67,107 @@ export function RoomView({ engine, config, inputMode }: { engine: GDEngine; conf
     if (state.status === "ended" && state.sessionId) router.push(`/report/${state.sessionId}`);
   }, [state.status, state.sessionId, router]);
 
-  // H = raise hand (not while typing).
+  // Warn before leaving mid-discussion.
+  useEffect(() => {
+    if (!running) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [running]);
+
+  // Typing mode: put the cursor in the composer once the discussion starts (desktop only).
+  useEffect(() => {
+    if (running && typed && isDesktop) composerRef.current?.focus();
+  }, [running, typed, isDesktop]);
+
+  const togglePause = useCallback(() => {
+    if (engine.getState().pauseReason === "user") engine.resume();
+    else engine.pause();
+  }, [engine]);
+
+  // Keyboard: Space interrupt · H raise hand · P pause · M mute · C captions · Esc closes the end dialog.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "h" && e.key !== "H") return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      engine.raiseHand();
+      if (e.key === "Escape") {
+        setConfirmEnd(false);
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || isTypingTarget(e.target)) return;
+      const onControl = (e.target as HTMLElement | null)?.closest("button, a, [role=switch]");
+      const s = engine.getState();
+      if (s.status !== "running") return;
+      switch (e.key) {
+        case " ":
+          if (onControl) return; // let Space activate the focused button
+          e.preventDefault();
+          engine.interrupt();
+          if (s.inputMode === "typed") composerRef.current?.focus();
+          break;
+        case "h":
+        case "H":
+          engine.raiseHand();
+          break;
+        case "p":
+        case "P":
+          togglePause();
+          break;
+        case "m":
+        case "M":
+          if (s.inputMode === "voice") engine.toggleMute();
+          break;
+        case "c":
+        case "C":
+          setCaptionsOn((v) => !v);
+          break;
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [engine]);
+  }, [engine, togglePause]);
 
-  const requestEnd = () => setConfirmEnd(true);
-  const doEnd = () => {
-    setConfirmEnd(false);
-    engine.end();
-  };
+  const transcript = (
+    <TranscriptPanel
+      ref={composerRef}
+      config={config}
+      state={state}
+      onSend={(t) => engine.sendTyped(t)}
+      highlight={!!yourTurn(state)}
+      className="h-full"
+    />
+  );
 
   return (
-    <div data-testid="room" className="flex h-screen overflow-hidden bg-d-700">
-      <Sidebar config={config} state={state} onToggleMute={() => engine.toggleMute()} onDisconnect={requestEnd} />
-      <div className="flex min-w-0 flex-1 flex-col lg:flex-row">
-        <Stage
-          config={config}
-          state={state}
-          inputMode={inputMode}
-          captionsOn={captionsOn}
-          chatOpen={chatOpen}
-          cutOff={cutOff}
-          confirmEnd={confirmEnd}
-          closingStartedAt={closingStartedAt}
-          onJoin={() => engine.start()}
-          onToggleMute={() => engine.toggleMute()}
-          onRaiseHand={() => engine.raiseHand()}
-          onToggleCaptions={() => setCaptionsOn((v) => !v)}
-          onToggleChat={() => setChatOpen((v) => !v)}
-          onEndRequest={requestEnd}
-          onEndCancel={() => setConfirmEnd(false)}
-          onEndConfirm={doEnd}
-        />
-        {chatOpen && (
-          <div className="flex h-[40vh] shrink-0 border-t border-d-950 lg:h-auto lg:border-t-0">
-            <TranscriptPanel config={config} state={state} onSend={(t) => engine.sendTyped(t)} />
-          </div>
-        )}
-      </div>
+    <div data-testid="room" className="flex h-dvh overflow-hidden bg-canvas">
+      <Sidebar config={config} state={state} onToggleMute={() => engine.toggleMute()} />
+      <Stage
+        config={config}
+        state={state}
+        inputMode={inputMode}
+        speakerMode={speakerMode}
+        captionsOn={captionsOn}
+        chatOpen={chatOpen}
+        cutOff={cutOff}
+        confirmEnd={confirmEnd}
+        mobileTranscript={!isDesktop && chatOpen ? transcript : null}
+        onJoin={() => engine.start()}
+        onToggleMute={() => engine.toggleMute()}
+        onRaiseHand={() => engine.raiseHand()}
+        onTogglePause={togglePause}
+        onToggleCaptions={() => setCaptionsOn((v) => !v)}
+        onToggleChat={() => setChatPref(!chatOpen)}
+        onEndRequest={() => setConfirmEnd((v) => !v)}
+        onEndCancel={() => setConfirmEnd(false)}
+        onEndConfirm={() => {
+          setConfirmEnd(false);
+          engine.end();
+        }}
+        onSpeakerMode={() => engine.setSpeakerMode(true)}
+        onInterrupt={() => {
+          engine.interrupt();
+          if (engine.getState().inputMode === "typed") composerRef.current?.focus();
+        }}
+      />
+      {isDesktop && chatOpen && <div className="flex w-96 shrink-0 border-l border-line">{transcript}</div>}
     </div>
   );
 }

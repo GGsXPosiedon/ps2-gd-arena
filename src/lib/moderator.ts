@@ -59,5 +59,7 @@ const HI: Lines = {
 };
 
 export function moderatorLines(language: Language): Lines {
-  return language === "hinglish" ? HI : EN;
+  const L = language === "hinglish" ? HI : EN;
+  // Topics often end with "?" or "."; the brief adds its own full stop.
+  return { ...L, brief: (topic, minutes, names) => L.brief(topic.trim().replace(/[?.!]+$/, ""), minutes, names) };
 }

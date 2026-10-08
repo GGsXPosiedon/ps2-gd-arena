@@ -37,6 +37,6 @@ export default function RoomPage() {
     };
   }, [router]);
 
-  if (!boot) return <div data-testid="room-loading" className="h-screen bg-black" />;
+  if (!boot) return <div data-testid="room-loading" className="h-dvh bg-canvas" />;
   return <RoomView engine={boot.engine} config={boot.config} inputMode={boot.inputMode} />;
 }

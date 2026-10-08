@@ -1,10 +1,13 @@
 "use client";
 
+import { Card } from "@/components/ui";
 import { fmtTime, timelineSegments } from "@/lib/metrics";
 import { speakerColor, speakerName } from "@/lib/personas";
 import type { SessionRecord, StudentMetrics } from "@/lib/types";
 
-/** Talk-time share bar + Gong-style "who spoke when" lanes. */
+const pctFmt = new Intl.NumberFormat("en", { style: "percent", maximumFractionDigits: 0 });
+
+/** Talk-time share bar + "who spoke when" lanes. */
 export function Timeline({
   session,
   metrics,
@@ -21,67 +24,64 @@ export function Timeline({
   const participants = lanes.filter((l) => l.speaker !== "mod");
 
   return (
-    <div className="rounded-lg bg-d-800 p-4">
+    <Card className="p-5">
       {/* share bar */}
-      <div className="mb-1 flex h-3 overflow-hidden rounded-full bg-d-900">
+      <div className="flex h-2 gap-px overflow-hidden rounded-full bg-surface-3">
         {participants.map((l) => (
           <div
             key={l.speaker}
-            title={`${speakerName(l.speaker, sn)} ${(shareOf(l.speaker) * 100).toFixed(0)}%`}
+            title={`${speakerName(l.speaker, sn)} ${pctFmt.format(shareOf(l.speaker))}`}
             style={{ width: `${shareOf(l.speaker) * 100}%`, background: speakerColor(l.speaker) }}
           />
         ))}
       </div>
-      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-tx-lo">
+      <div className="mt-3 mb-5 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-fg-2">
         {participants.map((l) => (
           <span key={l.speaker} className="inline-flex items-center gap-1.5">
-            <i className="inline-block h-2 w-2 rounded-full" style={{ background: speakerColor(l.speaker) }} />
-            <span className={l.speaker === "you" ? "font-semibold text-tx-hi" : ""}>{speakerName(l.speaker, sn)}</span>
-            <span className="font-mono">{(shareOf(l.speaker) * 100).toFixed(0)}%</span>
+            <span aria-hidden className="size-2 rounded-full" style={{ background: speakerColor(l.speaker) }} />
+            <span className={l.speaker === "you" ? "font-medium text-fg" : ""}>{speakerName(l.speaker, sn)}</span>
+            <span className="font-mono text-xs tabular-nums">{pctFmt.format(shareOf(l.speaker))}</span>
           </span>
         ))}
       </div>
 
       {/* lanes */}
-      <div className="space-y-1.5">
-        {lanes.map((l) => (
-          <div
-            key={l.speaker}
-            data-testid={`timeline-lane-${l.speaker}`}
-            className="grid grid-cols-[92px_1fr_44px] items-center gap-3"
-          >
-            <span className={`truncate text-xs ${l.speaker === "you" ? "font-semibold text-tx-hi" : "text-tx-lo"}`}>
-              {speakerName(l.speaker, sn)}
-            </span>
-            <div className="relative h-3.5 rounded-sm bg-d-900">
-              {l.segments.map((seg) => (
-                <button
-                  key={seg.id}
-                  onClick={() => onJump(seg.id)}
-                  title={`${fmtTime(seg.start)} · click to view`}
-                  className="absolute top-0 bottom-0 rounded-[2px] opacity-90 hover:opacity-100 hover:ring-1 hover:ring-tx-hi"
-                  style={{
-                    left: pct(seg.start),
-                    width: `max(3px, ${pct(seg.end - seg.start)})`,
-                    background: speakerColor(l.speaker),
-                  }}
-                />
-              ))}
-              {markers
-                .filter((m) => m.target === l.speaker)
-                .map((m, i) => (
-                  <span key={i} title={`Cut off at ${fmtTime(m.t)}`} className="pointer-events-none absolute inset-y-0" style={{ left: pct(m.t) }}>
-                    <span className="absolute inset-y-0 w-[2px] -translate-x-1/2 bg-danger" />
-                    <span className="absolute -top-[5px] h-0 w-0 -translate-x-1/2 border-x-[4px] border-t-[5px] border-x-transparent border-t-danger" />
-                  </span>
+      <div className="space-y-2">
+        {lanes.map((l) => {
+          const name = speakerName(l.speaker, sn);
+          return (
+            <div key={l.speaker} data-testid={`timeline-lane-${l.speaker}`} className="grid grid-cols-[84px_1fr_40px] items-center gap-3">
+              <span className={`truncate text-[13px] ${l.speaker === "you" ? "font-medium text-fg" : "text-fg-2"}`}>{name}</span>
+              <div className="relative h-3 rounded-sm bg-surface-2">
+                {l.segments.map((seg) => (
+                  <button
+                    key={seg.id}
+                    type="button"
+                    onClick={() => onJump(seg.id)}
+                    aria-label={`Go to ${name} at ${fmtTime(seg.start)}`}
+                    title={fmtTime(seg.start)}
+                    className="absolute inset-y-0 rounded-[2px] opacity-85 transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue"
+                    style={{ left: pct(seg.start), width: `max(3px, ${pct(seg.end - seg.start)})`, background: speakerColor(l.speaker) }}
+                  />
                 ))}
+                {markers
+                  .filter((m) => m.target === l.speaker)
+                  .map((m, i) => (
+                    <span
+                      key={i}
+                      title={`Cut off at ${fmtTime(m.t)}`}
+                      className="pointer-events-none absolute -inset-y-1 w-0.5 -translate-x-1/2 rounded-full bg-danger"
+                      style={{ left: pct(m.t) }}
+                    />
+                  ))}
+              </div>
+              <span className={`text-right font-mono text-xs tabular-nums ${l.speaker === "you" ? "text-fg" : "text-fg-3"}`}>
+                {l.speaker === "mod" ? "" : pctFmt.format(shareOf(l.speaker))}
+              </span>
             </div>
-            <span className={`text-right font-mono text-xs ${l.speaker === "you" ? "font-semibold text-tx-hi" : "text-tx-lo"}`}>
-              {l.speaker === "mod" ? "—" : `${(shareOf(l.speaker) * 100).toFixed(0)}%`}
-            </span>
-          </div>
-        ))}
-        <div className="grid grid-cols-[92px_1fr_44px] gap-3 font-mono text-[10.5px] text-tx-faint">
+          );
+        })}
+        <div className="grid grid-cols-[84px_1fr_40px] gap-3 font-mono text-[11px] text-fg-3 tabular-nums">
           <span />
           <div className="flex justify-between">
             {[0, 0.25, 0.5, 0.75, 1].map((f) => (
@@ -91,10 +91,16 @@ export function Timeline({
           <span />
         </div>
       </div>
-      <p className="mt-3 text-xs text-tx-faint">
-        Fair share is {(metrics.fairShare * 100).toFixed(0)}% each ({session.config.personas.length + 1} speakers, moderator excluded).{" "}
-        <span className="text-danger">▼</span> marks someone being cut off. Click a block to see that line.
+      <p className="mt-4 flex flex-wrap items-center gap-x-1.5 text-[13px] text-fg-3">
+        Fair share: {pctFmt.format(metrics.fairShare)} each.
+        {markers.length > 0 && (
+          <>
+            <span aria-hidden className="inline-block h-3 w-0.5 rounded-full bg-danger" />
+            Red marks show where someone was cut off.
+          </>
+        )}{" "}
+        Select a block to see the line.
       </p>
-    </div>
+    </Card>
   );
 }

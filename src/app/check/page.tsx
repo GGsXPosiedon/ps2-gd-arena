@@ -3,43 +3,88 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { Button, Card, Segmented, Spinner, buttonClass } from "@/components/ui";
 import { MicError, openMic, type MicHandle } from "@/lib/audio/mic";
 import { Recognizer, sttSupported } from "@/lib/audio/stt";
 import { VoiceBank, loadVoices, type SpeakHandle } from "@/lib/audio/tts";
 import { PERSONAS } from "@/lib/personas";
-import { DEFAULT_CONFIG, loadConfig } from "@/lib/storage";
+import { DEFAULT_CONFIG, loadConfig, saveConfig } from "@/lib/storage";
 import type { RoomConfig, SpeakerId } from "@/lib/types";
 
-const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blurple";
-const BARS = 16;
-
 type MicState = "idle" | "requesting" | "ok" | "denied" | "notfound" | "unsupported" | "error";
-type Status = "ok" | "warn" | "bad" | "pending";
+type Status = "ok" | "warn" | "bad" | "pending" | "busy";
+type Output = "headphones" | "speakers";
+const OUTPUTS: readonly Output[] = ["headphones", "speakers"];
 
 function StatusIcon({ status }: { status: Status }) {
-  const map: Record<Status, { cls: string; ch: string; label: string }> = {
-    ok: { cls: "bg-ok/20 text-ok", ch: "✓", label: "OK" },
-    warn: { cls: "bg-warn/20 text-warn", ch: "!", label: "Warning" },
-    bad: { cls: "bg-danger/20 text-danger", ch: "✕", label: "Problem" },
-    pending: { cls: "bg-d-600 text-tx-lo", ch: "•", label: "Pending" },
+  if (status === "busy") return <Spinner className="mt-0.5" />;
+  const common = {
+    width: 16,
+    height: 16,
+    viewBox: "0 0 16 16",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.6,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
   };
-  const m = map[status];
   return (
-    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${m.cls}`} aria-label={m.label}>
-      {m.ch}
+    <span className="mt-0.5 inline-flex shrink-0" aria-hidden="true">
+      {status === "ok" ? (
+        <svg {...common} className="text-ok">
+          <path d="M3.5 8.4 6.6 11.5 12.5 5" />
+        </svg>
+      ) : status === "warn" ? (
+        <svg {...common} className="text-warn">
+          <path d="M8 2.5 14 13H2L8 2.5Z" />
+          <path d="M8 6.5v3M8 11.3v.01" />
+        </svg>
+      ) : status === "bad" ? (
+        <svg {...common} className="text-[#ff6166]">
+          <circle cx="8" cy="8" r="6" />
+          <path d="m5.8 5.8 4.4 4.4M10.2 5.8l-4.4 4.4" />
+        </svg>
+      ) : (
+        <svg {...common} className="text-fg-3">
+          <circle cx="8" cy="8" r="2" fill="currentColor" stroke="none" />
+        </svg>
+      )}
     </span>
   );
 }
 
-function Row({ status, title, children }: { status: Status; title: string; children?: React.ReactNode }) {
+function Row({
+  status,
+  title,
+  children,
+  action,
+}: {
+  status: Status;
+  title: string;
+  children?: React.ReactNode;
+  action?: React.ReactNode;
+}) {
   return (
-    <div className="flex items-start gap-3 border-t border-d-600 py-3">
+    <div className="flex items-start gap-3 px-5 py-4">
       <StatusIcon status={status} />
       <div className="min-w-0 flex-1">
-        <div className="text-[13px] font-medium text-tx-hi">{title}</div>
-        {children && <div className="text-[12.5px] text-tx-lo">{children}</div>}
+        <div className="text-sm text-fg">{title}</div>
+        {children && <div className="mt-0.5 text-[13px] text-fg-2 text-pretty">{children}</div>}
       </div>
+      {action}
     </div>
+  );
+}
+
+function PlayIcon({ playing }: { playing: boolean }) {
+  return playing ? (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <rect x="2.5" y="2.5" width="7" height="7" rx="1" fill="currentColor" />
+    </svg>
+  ) : (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M3.5 2.2v7.6a.5.5 0 0 0 .76.43l6.1-3.8a.5.5 0 0 0 0-.86l-6.1-3.8a.5.5 0 0 0-.76.43Z" fill="currentColor" />
+    </svg>
   );
 }
 
@@ -53,6 +98,7 @@ export default function CheckPage() {
   const [sttBlocked, setSttBlocked] = useState(false);
   const [voiceCount, setVoiceCount] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   const micRef = useRef<MicHandle | null>(null);
   const recRef = useRef<Recognizer | null>(null);
@@ -88,6 +134,11 @@ export default function CheckPage() {
 
   async function testMic() {
     if (micState === "requesting" || micState === "ok") return;
+    // A permission change only takes effect after a reload.
+    if (micState === "denied") {
+      window.location.reload();
+      return;
+    }
     setMicState("requesting");
     try {
       const mic = await openMic();
@@ -116,11 +167,13 @@ export default function CheckPage() {
       }
     } catch (e) {
       const kind = e instanceof MicError ? e.kind : "other";
-      setMicState(kind === "denied" ? "denied" : kind === "notfound" ? "notfound" : kind === "unsupported" ? "unsupported" : "error");
+      setMicState(
+        kind === "denied" ? "denied" : kind === "notfound" ? "notfound" : kind === "unsupported" ? "unsupported" : "error",
+      );
     }
   }
 
-  async function hearVoices() {
+  async function playSample() {
     if (playing) {
       handleRef.current?.stop();
       setPlaying(false);
@@ -129,7 +182,7 @@ export default function CheckPage() {
     setPlaying(true);
     cancelledRef.current = false;
     const ids: SpeakerId[] = ["mod", ...config.personas];
-    const bank = await VoiceBank.create(ids);
+    const bank = await VoiceBank.create(ids, { language: config.language });
     for (const id of ids) {
       if (cancelledRef.current) break;
       const text = id === "mod" || id === "you" ? "I'm the moderator. I'll keep time." : `Hi, I'm ${PERSONAS[id].name}.`;
@@ -141,136 +194,200 @@ export default function CheckPage() {
     setPlaying(false);
   }
 
+  function setOutput(o: Output) {
+    const next = { ...config, speakerMode: o === "speakers" };
+    setConfig(next);
+    saveConfig(next);
+  }
+
   function leave(mode: "typed" | "voice") {
+    if (leaving) return;
+    setLeaving(true);
     cleanup();
     sessionStorage.setItem("floor:inputMode", mode);
     router.push("/room");
   }
 
-  const lit = Math.round(Math.min(1, level * 1.2) * BARS);
-  const heardOk = heard.split(/\s+/).filter(Boolean).length >= 3;
+  const heardEnough = heard.split(/\s+/).filter(Boolean).length >= 3;
   const micBad = micState === "denied" || micState === "notfound" || micState === "unsupported" || micState === "error";
-  const canTakeSeat = micState === "ok" || !!config.e2e;
+  const canJoin = micState === "ok" || !!config.e2e;
+  const output: Output = config.speakerMode ? "speakers" : "headphones";
+  const sttUnavailable = sttSupport === false || sttBlocked;
 
-  const micRows: Record<MicState, { status: Status; title: string; detail: string }> = {
-    idle: { status: "pending", title: "Microphone", detail: "Not tested yet. Press “Test my mic”." },
-    requesting: { status: "pending", title: "Microphone", detail: "Waiting for permission…" },
-    ok: { status: "ok", title: "Microphone working", detail: "Speak and watch the meter move." },
-    denied: { status: "bad", title: "Microphone access is blocked", detail: "See below to enable it, or continue by typing." },
-    notfound: { status: "bad", title: "No microphone found", detail: "Plug one in and try again, or continue by typing." },
-    unsupported: { status: "bad", title: "This browser can't use the microphone", detail: "Try Chrome or Edge, or continue by typing." },
-    error: { status: "bad", title: "Couldn't start the microphone", detail: "Try again, or continue by typing." },
+  const mic: Record<MicState, { status: Status; title: string; detail: string }> = {
+    idle: { status: "pending", title: "Microphone", detail: "Not tested yet." },
+    requesting: {
+      status: "busy",
+      title: "Microphone",
+      detail: "Waiting for permission…",
+    },
+    ok: {
+      status: "ok",
+      title: "Microphone on",
+      detail: "Speak and watch the level move.",
+    },
+    denied: {
+      status: "bad",
+      title: "Microphone access is blocked",
+      detail: "Select the lock icon in the address bar, set Microphone to Allow, then select Try Again. Or use the keyboard.",
+    },
+    notfound: {
+      status: "bad",
+      title: "No microphone found",
+      detail: "Plug one in and select Try Again, or use the keyboard.",
+    },
+    unsupported: {
+      status: "bad",
+      title: "This browser can't use a microphone",
+      detail: "Try Chrome or Edge, or use the keyboard.",
+    },
+    error: {
+      status: "bad",
+      title: "Couldn't start the microphone",
+      detail: "Select Try Again, or use the keyboard.",
+    },
   };
-  const micRow = micRows[micState];
+  const m = mic[micState];
 
   return (
-    <main className="grid min-h-screen place-items-center px-4 py-8 text-[14px]">
-      <div className="w-full max-w-[560px] rounded-lg bg-d-800 p-6">
-        <div className="mb-1 flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-tx-hi">Quick sound check</h1>
-          <Link href="/" className={`rounded text-[12px] text-tx-lo hover:text-tx ${FOCUS}`}>
-            ← Back to setup
-          </Link>
+    <main id="main" className="mx-auto max-w-[480px] px-4 pt-10 pb-16 sm:pt-20">
+      <div className="mb-6 flex items-center justify-between">
+        <Link href="/" className={buttonClass("ghost", "sm", "-ml-2.5")}>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M10 3 5 8l5 5" />
+          </svg>
+          Setup
+        </Link>
+        <span className="text-xs text-fg-3 tabular-nums">Step 2 of 3</span>
+      </div>
+
+      <h1 className="text-2xl font-semibold tracking-tight text-balance">Check Your Mic</h1>
+      <p className="mt-1.5 text-fg-2 text-pretty">Select Test Microphone and say a sentence out loud.</p>
+
+      {/* ---------- microphone ---------- */}
+      <Card className="mt-6">
+        <div className={`flex items-start gap-3 px-5 pt-5 ${micBad ? "pb-5" : ""}`}>
+          <StatusIcon status={m.status} />
+          <div className="min-w-0 flex-1" role="status" aria-live="polite">
+            <div className="text-sm text-fg">{m.title}</div>
+            <div className="mt-0.5 text-[13px] text-fg-2 text-pretty">{m.detail}</div>
+          </div>
+          <Button
+            size="sm"
+            variant={micState === "idle" || micBad ? "primary" : "secondary"}
+            data-testid="test-mic"
+            onClick={testMic}
+            disabled={micState === "requesting" || micState === "ok"}
+          >
+            {micState === "ok"
+              ? "Microphone On"
+              : micState === "requesting"
+                ? "Requesting…"
+                : micBad
+                  ? "Try Again"
+                  : "Test Microphone"}
+          </Button>
         </div>
-        <p className="mb-4 text-tx-lo">
-          Press the button, then say: <em className="text-tx">“I think a four-day week could work in some sectors.”</em>
-        </p>
 
-        <button
-          type="button"
-          data-testid="test-mic"
-          onClick={testMic}
-          disabled={micState === "requesting" || micState === "ok"}
-          className={`mb-3 rounded-md bg-d-600 px-4 py-2 text-[13px] font-medium text-tx-hi hover:bg-d-500 disabled:cursor-default disabled:opacity-60 ${FOCUS}`}
-        >
-          {micState === "ok" ? "Mic is on" : micState === "requesting" ? "Requesting…" : micBad ? "Try again" : "Test my mic"}
-        </button>
-
-        <div className="mb-1 flex h-9 items-end gap-[3px]" aria-hidden>
-          {Array.from({ length: BARS }, (_, i) => (
-            <span
-              key={i}
-              className={`flex-1 rounded-sm transition-[height] duration-75 ${i < lit ? "bg-ok" : "bg-d-600"}`}
-              style={{ height: `${20 + (i / BARS) * 80}%` }}
-            />
-          ))}
-        </div>
-        <div className="mb-4 min-h-5 text-[13px] text-tx" aria-live="polite">
-          {heard ? (
-            <>
-              Heard: <em>“{heard}”</em> {heardOk && <span className="text-ok">✓</span>}
-            </>
-          ) : micState === "ok" && sttSupport ? (
-            <span className="text-tx-faint">Listening…</span>
-          ) : null}
-        </div>
-
-        <Row status={micRow.status} title={micRow.title}>
-          {micRow.detail}
-        </Row>
-
-        {micState === "denied" && (
-          <div className="mb-3 rounded-md border border-danger/40 bg-danger/10 p-3 text-[12.5px] text-tx">
-            <p className="mb-2">
-              To enable it: click the lock icon in the address bar → Site settings → Microphone → Allow, then reload this page.
-            </p>
-            <button
-              type="button"
-              onClick={() => leave("typed")}
-              className={`rounded-md bg-blurple px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-blurple-hover ${FOCUS}`}
-            >
-              Continue by typing
-            </button>
+        {!micBad && (
+          <div className="px-5 pt-4 pb-5">
+            <div className="h-1.5 overflow-hidden rounded-full bg-surface-3" aria-hidden="true">
+              <div
+                className="h-full origin-left rounded-full bg-ok transition-transform duration-75"
+                style={{
+                  transform: `scaleX(${micState === "ok" ? Math.min(1, level * 1.2) : 0})`,
+                }}
+              />
+            </div>
+            <div className="mt-3 flex min-h-5 items-start gap-2 text-[13px]" aria-live="polite">
+              {heard ? (
+                <>
+                  {heardEnough && <StatusIcon status="ok" />}
+                  <span className="min-w-0 break-words text-fg-2">
+                    {heardEnough ? "Heard you: " : ""}
+                    <span className="text-fg">“{heard}”</span>
+                  </span>
+                </>
+              ) : micState === "ok" && sttSupport ? (
+                <span className="text-fg-3">Listening…</span>
+              ) : null}
+            </div>
           </div>
         )}
+      </Card>
+
+      {/* ---------- audio + environment ---------- */}
+      <Card className="mt-4 divide-y divide-line">
+        <div className="px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-fg">What are you listening on?</div>
+            <Segmented
+              label="Audio output"
+              options={OUTPUTS}
+              value={output}
+              onChange={setOutput}
+              testId={(o) => `output-${o}`}
+              render={(o) => (o === "headphones" ? "Headphones" : "Laptop Speakers")}
+            />
+          </div>
+          <p className="mt-2 text-[13px] text-fg-2 text-pretty">
+            {output === "headphones"
+              ? "Speak over an AI any time to cut in."
+              : "The AIs can hear themselves through your mic, so press Space to cut in instead of speaking."}
+          </p>
+        </div>
 
         <Row
-          status={sttSupport === null ? "pending" : sttSupport && !sttBlocked ? "ok" : "warn"}
-          title={sttSupport === false || sttBlocked ? "Live transcription unavailable" : "Live transcription"}
+          status={sttUnavailable ? "warn" : heard ? "ok" : "pending"}
+          title={sttUnavailable ? "Live captions unavailable" : "Live captions"}
         >
-          {sttSupport === false || sttBlocked
-            ? "Live transcription needs Chrome or Edge. You can still take part by typing."
-            : "Your speech is transcribed in the browser as you talk."}
+          {sttUnavailable
+            ? "Live captions need Chrome or Edge. You can still type your points."
+            : heard
+              ? "Your words appear on screen as you speak."
+              : micBad
+                ? "Needs microphone access."
+                : "Starts when you test your microphone."}
         </Row>
 
-        <Row status="warn" title="Headphones recommended">
-          Without them, the AIs may hear their own voices through your mic and stop mid-sentence.
+        <Row
+          status={voiceCount === null ? "busy" : voiceCount > 0 ? "ok" : "warn"}
+          title={voiceCount === null ? "Loading voices…" : voiceCount > 0 ? "Voices ready" : "No voices"}
+          action={
+            voiceCount ? (
+              <Button size="sm" variant="ghost" onClick={playSample} aria-label={playing ? "Stop Sample" : "Play Sample"}>
+                <PlayIcon playing={playing} />
+                {playing ? "Stop" : "Play Sample"}
+              </Button>
+            ) : undefined
+          }
+        >
+          {voiceCount === 0 ? "No voices in this browser. AI lines will show as captions." : null}
         </Row>
+      </Card>
 
-        <Row status={voiceCount === null ? "pending" : voiceCount > 0 ? "ok" : "warn"} title="Voices">
-          {voiceCount === null ? (
-            "Loading voices…"
-          ) : voiceCount > 0 ? (
-            <>
-              {voiceCount} voices available.{" "}
-              <button type="button" onClick={hearVoices} className={`rounded text-blurple hover:underline ${FOCUS}`}>
-                {playing ? "■ stop" : "▶ hear them"}
-              </button>
-            </>
-          ) : (
-            "No voices found; AI lines will appear as captions."
-          )}
-        </Row>
-
-        <div className="mt-5 flex items-center justify-between gap-3">
-          <button
-            type="button"
-            data-testid="continue-typing"
-            onClick={() => leave("typed")}
-            className={`rounded text-[13px] text-tx-lo underline-offset-2 hover:text-tx hover:underline ${FOCUS}`}
-          >
-            Continue by typing
-          </button>
-          <button
-            type="button"
-            data-testid="take-seat"
-            onClick={() => leave("voice")}
-            disabled={!canTakeSeat}
-            className={`rounded-md bg-blurple px-4 py-2 text-[14px] font-semibold text-white hover:bg-blurple-hover disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`}
-          >
-            Take my seat →
-          </button>
-        </div>
+      <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Button variant={micBad ? "primary" : "secondary"} data-testid="continue-typing" onClick={() => leave("typed")}>
+          Use Keyboard Instead
+        </Button>
+        <Button
+          variant={micBad ? "secondary" : "primary"}
+          data-testid="take-seat"
+          onClick={() => leave("voice")}
+          disabled={!canJoin || leaving}
+        >
+          {leaving ? "Joining…" : "Join Room"}
+        </Button>
       </div>
     </main>
   );

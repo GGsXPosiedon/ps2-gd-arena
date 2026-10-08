@@ -1,10 +1,10 @@
 "use client";
 
 import { AiTag, Avatar } from "@/components/Avatar";
-import { PERSONAS, speakerColor, speakerName } from "@/lib/personas";
+import { Badge } from "@/components/ui";
+import { PERSONAS, speakerName } from "@/lib/personas";
 import type { SpeakerId } from "@/lib/types";
-import { tint } from "./format";
-import { HandIcon, MicOffIcon } from "./icons";
+import { HandIcon, KeyboardIcon, MicOffIcon } from "./icons";
 
 export function Tile({
   id,
@@ -14,8 +14,9 @@ export function Tile({
   failed,
   cutOff,
   muted,
+  typed,
   handRaised,
-  className = "",
+  highlight,
 }: {
   id: SpeakerId;
   studentName: string;
@@ -24,48 +25,46 @@ export function Tile({
   failed: boolean;
   cutOff: boolean;
   muted?: boolean;
+  typed?: boolean;
   handRaised?: boolean;
-  className?: string;
+  highlight?: boolean; // "your turn" cue
 }) {
   const isYou = id === "you";
-  const color = speakerColor(id);
-  const sub = id === "mod" ? "Moderator" : isYou ? null : PERSONAS[id].archetype;
+  const sub = id === "mod" ? "Keeps time" : isYou ? (speaking ? "Speaking" : null) : PERSONAS[id].archetype;
 
   return (
     <div
       data-testid={`seat-${id}`}
       data-speaking={speaking ? "true" : "false"}
-      className={`relative aspect-video overflow-hidden rounded-lg transition-shadow duration-150 ${
-        speaking ? "ring-2 ring-ok" : cutOff ? "ring-2 ring-danger" : ""
-      } ${className}`}
-      style={{ background: tint(color) }}
+      className={`@container relative aspect-[4/3] min-w-0 overflow-hidden rounded-xl border bg-surface transition-[border-color,box-shadow] duration-150 sm:aspect-video ${
+        speaking ? "border-transparent ring-2 ring-ok" : highlight ? "border-fg" : cutOff ? "border-danger/50" : "border-line"
+      }`}
     >
-      <div className="absolute inset-0 grid place-items-center">
-        <Avatar speaker={id} studentName={studentName} size={72} speaking={speaking} />
+      <div className="absolute inset-0 grid place-items-center pb-6">
+        <Avatar speaker={id} studentName={studentName} size={52} />
       </div>
 
-      <div className="absolute top-2 right-2 flex gap-1">
-        {cutOff && <span className="rounded bg-danger px-1.5 py-0.5 text-[11px] font-semibold text-white">cut off</span>}
-        {thinking && !speaking && (
-          <span className="rounded bg-black/60 px-1.5 py-0.5 text-[11px] text-tx-lo">thinking…</span>
-        )}
-        {failed && <span className="rounded bg-danger/90 px-1.5 py-0.5 text-[11px] font-semibold text-white">can&apos;t reply</span>}
+      <div className="absolute top-2 right-2 flex flex-wrap justify-end gap-1">
+        {cutOff && <Badge tone="danger">Cut off</Badge>}
+        {thinking && !speaking && <Badge>About to speak</Badge>}
+        {failed && <Badge tone="danger">Can’t reply</Badge>}
         {handRaised && (
-          <span className="flex items-center gap-1 rounded bg-warn px-1.5 py-0.5 text-[11px] font-semibold text-d-900">
-            <HandIcon className="h-3.5 w-3.5" /> hand raised
-          </span>
+          <Badge tone="warn">
+            <HandIcon className="size-3" /> Hand raised
+          </Badge>
         )}
-        {muted && (
-          <span className="grid h-6 w-6 place-items-center rounded-full bg-danger text-white" title="Muted">
-            <MicOffIcon className="h-3.5 w-3.5" />
+        {(muted || typed) && (
+          <span className="grid size-5 place-items-center rounded-full border border-line-2 text-fg-3" title={typed ? "Typing" : "Muted"}>
+            {typed ? <KeyboardIcon className="size-3" /> : <MicOffIcon className="size-3" />}
+            <span className="sr-only">{typed ? "Typing" : "Muted"}</span>
           </span>
         )}
       </div>
 
-      <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center rounded bg-black/60 px-2 py-0.5 text-[13px] font-medium text-tx-hi">
-        <span className="truncate">{speakerName(id, studentName)}</span>
+      <div className="absolute inset-x-3 bottom-2.5 flex min-w-0 items-center text-[13px]">
+        <span className="truncate font-medium text-fg">{speakerName(id, studentName)}</span>
         {!isYou && <AiTag />}
-        {sub && <span className="ml-1.5 hidden truncate text-[11.5px] font-normal text-tx-lo sm:inline">{sub}</span>}
+        {sub && <span className={`ml-2 hidden truncate text-xs @[15rem]:inline ${speaking && isYou ? "text-ok" : "text-fg-3"}`}>{sub}</span>}
       </div>
     </div>
   );

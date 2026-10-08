@@ -14,6 +14,7 @@ export interface RoomConfig {
   patienceMs: number; // silence before an AI takes the floor (600–2500)
   captions: boolean;
   studentName: string; // "" = unnamed, AIs say "you"
+  focus?: string; // optional drill focus shown in the room lobby, e.g. "Hold the floor when Arjun cuts in"
   speakerMode?: boolean; // no headphones: AI audio can't trigger barge-in; interrupt with Space / button
   e2e?: boolean; // test/demo mode: silent fast TTS, short timings
 }

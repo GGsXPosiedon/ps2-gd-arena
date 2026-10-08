@@ -8,6 +8,7 @@ import type { SessionRecord, SpeakerId, Utterance } from "@/lib/types";
 /** Replays a transcript moment: the student's own recording if we have it, otherwise the AI voice. */
 export function useReplay(session: SessionRecord | null) {
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const urlRef = useRef<string | null>(null);
   const bankRef = useRef<VoiceBank | null>(null);
@@ -41,8 +42,12 @@ export function useReplay(session: SessionRecord | null) {
       if (u.speaker === "you") {
         if (!session.hasAudio) return setPlayingId(null);
         if (!audioRef.current) {
+          setLoadingId(u.id);
           const blob = await loadAudio(session.id);
-          if (!blob) return setPlayingId(null);
+          if (!blob) {
+            setLoadingId(null);
+            return setPlayingId(null);
+          }
           urlRef.current = URL.createObjectURL(blob);
           audioRef.current = new Audio(urlRef.current);
           await new Promise<void>((resolve) => {
@@ -59,6 +64,7 @@ export function useReplay(session: SessionRecord | null) {
               a.currentTime = 1e101;
             });
           }
+          setLoadingId(null);
         }
         const a = audioRef.current!;
         a.currentTime = Math.max(0, (u.start - session.audioStartOffset) / 1000);
@@ -71,8 +77,10 @@ export function useReplay(session: SessionRecord | null) {
         return;
       }
       if (!bankRef.current) {
+        setLoadingId(u.id);
         const speakers: SpeakerId[] = ["mod", ...session.config.personas];
-        bankRef.current = await VoiceBank.create(speakers);
+        bankRef.current = await VoiceBank.create(speakers, { language: session.config.language });
+        setLoadingId(null);
       }
       const handle = bankRef.current.speak(u.speaker, u.text);
       speakRef.current = handle;
@@ -86,5 +94,5 @@ export function useReplay(session: SessionRecord | null) {
     [session, stop],
   );
 
-  return { play, stop, playingId, canReplay };
+  return { play, stop, playingId, loadingId, canReplay };
 }

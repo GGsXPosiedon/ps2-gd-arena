@@ -64,7 +64,7 @@ test.describe("live GD room (e2e mode: mock AI, silent captions, 40 s discussion
     await expect(page.getByTestId("timeline-lane-you")).toBeVisible();
 
     // The session shows up in "Recent sessions" on the setup page.
-    await page.getByTestId("practice-again").click();
+    await page.getByTestId("new-discussion").first().click();
     await expect(page.getByTestId("recent-session").first()).toBeVisible();
   });
 

@@ -46,6 +46,8 @@ export interface EngineState {
   aiDegraded: boolean;
   ttsSilent: boolean;
   yourClosingTurn: boolean;
+  notHearingWords: boolean; // voice detected for a while but no transcribed words
+  echoSuspected: boolean; // AIs keep getting cut off right after they start (speakers without headphones)
   utterances: Utterance[];
   events: SessionEvent[];
   sessionId: string | null; // set once saved
@@ -90,6 +92,7 @@ export class GDEngine {
   private audioStartOffset = 0;
   private current: { handle: SpeakHandle; speaker: SpeakerId; id: string; interruptible: boolean } | null = null;
   private bargedIn = false;
+  private currentStart = 0;
 
   // turn state
   private uid = 0;
@@ -137,6 +140,8 @@ export class GDEngine {
       aiDegraded: false,
       ttsSilent: false,
       yourClosingTurn: false,
+      notHearingWords: false,
+      echoSuspected: false,
       utterances: [],
       events: [],
       sessionId: null,
@@ -252,6 +257,9 @@ export class GDEngine {
     }
     this.checkStudentTurnEnd();
     this.maybeInterject();
+    const t = this.turn;
+    const deaf = !!t && this.s.studentSpeaking && !t.finals.length && !t.interim && this.now() - t.start > 3000;
+    if (deaf !== this.s.notHearingWords) this.set({ notHearingWords: deaf });
   }
 
   private async checkpoint() {
@@ -304,6 +312,16 @@ export class GDEngine {
     this.set({ paused: false, pauseReason: null });
     this.resumeClock();
     this.resumeLine = true;
+  }
+
+  /** Switch to speaker mode mid-session (e.g. after an echo warning): voice no longer interrupts AIs. */
+  setSpeakerMode(on: boolean) {
+    this.cfg = { ...this.cfg, speakerMode: on };
+    this.set({ echoSuspected: false });
+  }
+
+  get speakerMode() {
+    return !!this.cfg.speakerMode;
   }
 
   /** Explicit interruption (Space / button): stops the AI that is speaking and gives the student the floor. */
@@ -479,9 +497,16 @@ export class GDEngine {
 
   // ---------- barge-in / interjection ----------
 
+  private earlyCuts: number[] = [];
+
   private bargeIn() {
     const cur = this.current;
     if (!cur || !cur.interruptible) return;
+    // Being cut off within 500 ms of starting, twice in 30 s, usually means the mic hears the speakers.
+    if (this.now() - this.currentStart < 500) {
+      this.earlyCuts = [...this.earlyCuts.filter((t) => this.now() - t < 30_000), this.now()];
+      if (this.earlyCuts.length >= 2 && !this.s.echoSuspected && !this.cfg.speakerMode) this.set({ echoSuspected: true });
+    }
     this.bargedIn = true;
     cur.handle.stop();
     this.event({ type: "interrupt", by: "you", target: cur.speaker });
@@ -598,6 +623,7 @@ export class GDEngine {
     if (this.current) await this.waitFor(() => !this.current, 30_000);
     const id = this.nextId();
     const start = this.now();
+    this.currentStart = start;
     this.bargedIn = false;
     this.mic?.setSensitivity({ thresholdMul: 2.2, minSpeechMs: 350 });
     const handle = this.bank!.speak(speaker, text, (c) => this.set({ live: { id, speaker, text, shown: c } }));

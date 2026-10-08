@@ -13,8 +13,23 @@ export function Avatar({
   size?: number;
   speaking?: boolean;
 }) {
+  if (speaker === "mod") {
+    // Neutral outlined avatar with a stopwatch glyph (the moderator keeps time), distinct from persona initials.
+    return (
+      <span
+        className="inline-grid shrink-0 place-items-center rounded-full border border-line-2 bg-surface-3 text-fg-2"
+        style={{ width: size, height: size, boxShadow: speaking ? "0 0 0 2px var(--color-canvas), 0 0 0 4px var(--color-ok)" : undefined }}
+        aria-hidden
+      >
+        <svg width={size * 0.5} height={size * 0.5} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <circle cx="12" cy="14" r="7" />
+          <path d="M12 14V10.5M10 2h4M12 2v5" />
+        </svg>
+      </span>
+    );
+  }
   const name = speakerName(speaker, studentName);
-  const initials = speaker === "mod" ? "M" : speaker === "you" && !studentName.trim() ? "You" : name.slice(0, 1).toUpperCase();
+  const initials = speaker === "you" && !studentName.trim() ? "You" : name.slice(0, 1).toUpperCase();
   return (
     <span
       className="inline-grid shrink-0 place-items-center rounded-full font-medium text-black select-none"

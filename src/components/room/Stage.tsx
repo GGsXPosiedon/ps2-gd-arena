@@ -1,376 +1,409 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { Avatar } from "@/components/Avatar";
+import { useEffect, useRef, type ReactNode } from "react";
+import { Badge, Button, IconButton, Kbd, Notice, Spinner } from "@/components/ui";
 import type { EngineState } from "@/lib/engine";
-import { speakerColor, speakerName } from "@/lib/personas";
+import { speakerName } from "@/lib/personas";
 import type { RoomConfig, SpeakerId } from "@/lib/types";
 import { PHASE_LABEL, fmtClock } from "./format";
-import { CcIcon, ChatIcon, HandIcon, MicIcon, MicOffIcon, PhoneDownIcon, SpeakerIcon } from "./icons";
+import { CcIcon, ChatIcon, HandIcon, KeyboardIcon, MicIcon, MicOffIcon, PauseIcon, PhoneDownIcon, PlayIcon } from "./icons";
+import { Lobby } from "./Lobby";
 import { Tile } from "./Tile";
 
-const ROUND =
-  "grid h-12 w-12 place-items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blurple disabled:cursor-not-allowed disabled:opacity-40";
-
-export function Stage({
-  config,
-  state,
-  inputMode,
-  captionsOn,
-  chatOpen,
-  cutOff,
-  confirmEnd,
-  closingStartedAt,
-  onJoin,
-  onToggleMute,
-  onRaiseHand,
-  onToggleCaptions,
-  onToggleChat,
-  onEndRequest,
-  onEndCancel,
-  onEndConfirm,
-}: {
+export interface StageProps {
   config: RoomConfig;
   state: EngineState;
   inputMode: "voice" | "typed";
+  speakerMode: boolean;
   captionsOn: boolean;
   chatOpen: boolean;
   cutOff: Partial<Record<SpeakerId, boolean>>;
   confirmEnd: boolean;
-  closingStartedAt: number | null;
+  mobileTranscript: ReactNode | null; // rendered in place of the tiles on small screens
   onJoin: () => void;
   onToggleMute: () => void;
   onRaiseHand: () => void;
+  onTogglePause: () => void;
   onToggleCaptions: () => void;
   onToggleChat: () => void;
   onEndRequest: () => void;
   onEndCancel: () => void;
   onEndConfirm: () => void;
-}) {
+  onSpeakerMode: () => void;
+  onInterrupt: () => void;
+}
+
+export function Stage(p: StageProps) {
+  const { config, state } = p;
   const seats: SpeakerId[] = ["mod", ...config.personas, "you"];
   const lobby = state.status === "idle" || state.status === "starting";
   const running = state.status === "running";
   const typed = state.inputMode === "typed";
-  const n = config.personas.length;
+  const turn = yourTurn(state);
 
-  const timerText =
-    state.phase === "closing" ? "Closing" : state.phase === "ended" ? "00:00" : fmtClock(state.timeLeftMs);
+  const timerText = lobby
+    ? config.e2e
+      ? "00:40"
+      : fmtClock(config.durationMin * 60_000)
+    : state.phase === "closing"
+      ? "Closing"
+      : state.phase === "ended"
+        ? "00:00"
+        : fmtClock(state.timeLeftMs);
   const lowTime = state.phase === "discussion" && state.timeLeftMs < 60_000;
-
-  // tile width by seat count (Discord-style grid, centred last row)
-  const count = seats.length;
-  const tileW =
-    count <= 4 ? "w-[calc(50%-0.5rem)]" : count <= 6 ? "w-[calc(33.333%-0.5rem)]" : "w-[calc(25%-0.5rem)]";
+  const cols = seats.length <= 4 ? "grid-cols-2" : seats.length <= 6 ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2 sm:grid-cols-3 xl:grid-cols-4";
 
   return (
-    <section className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-black">
-      {/* header */}
-      <header className="flex h-12 shrink-0 items-center gap-3 px-4">
-        <SpeakerIcon className="h-5 w-5 shrink-0 text-tx-lo" />
-        <h1 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-tx-hi" title={config.topic}>
+    <section id="main" className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-canvas" aria-label="Discussion">
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-4">
+        <h1 className="min-w-0 flex-1 truncate text-sm font-medium text-fg" title={config.topic}>
           {config.topic}
         </h1>
-        <span className="hidden shrink-0 rounded-full bg-d-800 px-2.5 py-1 text-[12px] text-tx-lo lg:inline">
-          {n} AI participants + AI moderator
-        </span>
-        <span
-          data-testid="phase"
-          className="shrink-0 rounded-full bg-d-800 px-2.5 py-1 text-[12px] font-medium text-tx-hi"
-        >
-          {lobby ? "Not started" : PHASE_LABEL[state.phase]}
-        </span>
-        <span
-          data-testid="timer"
-          className={`shrink-0 font-mono text-[22px] leading-none tabular-nums ${lowTime ? "text-danger" : "text-tx-hi"}`}
-          aria-label="Time left"
-        >
-          {timerText}
-          {state.phase !== "closing" && state.phase !== "ended" && (
-            <span className="ml-1 font-sans text-[11px] text-tx-lo">left</span>
+        <Badge className="shrink-0">
+          <span data-testid="phase">{lobby ? "Not Started" : PHASE_LABEL[state.phase]}</span>
+        </Badge>
+        <div className="flex shrink-0 items-baseline gap-1.5">
+          {(lobby || state.phase === "brief" || state.phase === "opening" || state.phase === "discussion") && (
+            <span className="hidden text-xs text-fg-3 sm:inline">{lobby ? "Duration" : "Time left"}</span>
           )}
-        </span>
+          <span
+            data-testid="timer"
+            aria-live="off"
+            className={`font-mono text-base tabular-nums ${lowTime ? "text-[#ff6166]" : "text-fg"}`}
+          >
+            {timerText}
+          </span>
+        </div>
       </header>
 
-      {/* status chips + banners */}
       {(state.micError || state.aiDegraded || state.ttsSilent) && (
-        <div className="shrink-0 space-y-1.5 px-4 pb-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 pt-3">
           {state.micError && (
-            <div role="alert" className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-[13px] text-warn">
+            <Notice tone="warn" className="w-full">
               {state.micError}
-            </div>
+            </Notice>
           )}
-          <div className="flex flex-wrap gap-1.5">
-            {state.aiDegraded && (
-              <span className="rounded-full bg-warn/15 px-2.5 py-0.5 text-[12px] text-warn">
-                AI is having trouble; the moderator is filling in
-              </span>
-            )}
-            {state.ttsSilent && (
-              <span className="rounded-full bg-d-800 px-2.5 py-0.5 text-[12px] text-tx-lo">
-                No voices available; AI lines are shown as captions
-              </span>
-            )}
-          </div>
+          {state.aiDegraded && <Badge tone="warn">AI is having trouble responding. The moderator is filling in.</Badge>}
+          {state.ttsSilent && <Badge>{config.e2e ? "Captions only (test mode)" : "Captions only (no voices in this browser)"}</Badge>}
         </div>
       )}
 
-      {/* stage body */}
-      <div className="relative min-h-0 flex-1 overflow-y-auto px-4">
+      <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {lobby ? (
-          <Lobby config={config} inputMode={inputMode} starting={state.status === "starting"} onJoin={onJoin} />
+          <div className="h-full px-4">
+            <Lobby config={config} inputMode={p.inputMode} speakerMode={p.speakerMode} starting={state.status === "starting"} onJoin={p.onJoin} />
+          </div>
+        ) : p.mobileTranscript ? (
+          <div className="flex h-full flex-col">{p.mobileTranscript}</div>
         ) : (
-          <div className="flex min-h-full flex-wrap content-center justify-center gap-2 py-2">
-            {seats.map((id) => (
-              <Tile
-                key={id}
-                id={id}
-                className={`${tileW} max-w-[420px] min-w-[180px]`}
-                studentName={config.studentName}
-                speaking={id === "you" ? state.studentSpeaking : state.live?.speaker === id}
-                thinking={state.thinking === id}
-                failed={state.failed === id}
-                cutOff={!!cutOff[id]}
-                muted={id === "you" && (state.muted || typed)}
-                handRaised={id === "you" && state.handRaised}
-              />
-            ))}
+          <div className="flex min-h-full items-center px-4 py-4">
+            <div className={`mx-auto grid w-full max-w-5xl gap-2 ${cols}`}>
+              {seats.map((id) => (
+                <Tile
+                  key={id}
+                  id={id}
+                  studentName={config.studentName}
+                  speaking={id === "you" ? state.studentSpeaking : state.live?.speaker === id}
+                  thinking={state.thinking === id}
+                  failed={state.failed === id}
+                  cutOff={!!p.cutOff[id]}
+                  muted={id === "you" && state.muted}
+                  typed={id === "you" && typed}
+                  handRaised={id === "you" && state.handRaised}
+                  highlight={id === "you" && !!turn}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>
 
-      {/* captions */}
-      {!lobby && captionsOn && <Captions config={config} state={state} />}
-
-      {/* notices */}
-      {!lobby && (state.notice || state.yourClosingTurn) && (
-        <div className="flex shrink-0 justify-center px-4 pb-2">
-          {state.yourClosingTurn ? (
-            <ClosingBanner startedAt={closingStartedAt} />
-          ) : (
-            <div role="status" className="rounded-md bg-warn px-3 py-1.5 text-[13px] font-semibold text-d-900">
-              {state.notice}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* controls */}
       {!lobby && (
-        <div className="relative flex shrink-0 items-center justify-center gap-3 pt-1 pb-5">
-          <button
-            type="button"
-            data-testid="mute-toggle"
-            onClick={onToggleMute}
-            disabled={typed || !running}
-            aria-pressed={state.muted}
-            aria-label={typed ? "Microphone unavailable (typing mode)" : state.muted ? "Unmute" : "Mute"}
-            title={typed ? "Typing mode" : state.muted ? "Unmute" : "Mute"}
-            className={`${ROUND} ${state.muted || typed ? "bg-danger text-white hover:bg-danger/85" : "bg-d-600 text-tx-hi hover:bg-d-500"}`}
-          >
-            {state.muted || typed ? <MicOffIcon /> : <MicIcon />}
-          </button>
-          <button
-            type="button"
-            data-testid="raise-hand"
-            onClick={onRaiseHand}
-            disabled={!running || state.phase === "closing"}
-            aria-pressed={state.handRaised}
-            aria-label="Raise hand (H)"
-            title="Raise hand (H)"
-            className={`${ROUND} ${state.handRaised ? "bg-warn text-d-900" : "bg-d-600 text-tx-hi hover:bg-d-500"}`}
-          >
-            <HandIcon />
-          </button>
-          <button
-            type="button"
-            data-testid="cc-toggle"
-            onClick={onToggleCaptions}
-            aria-pressed={captionsOn}
-            aria-label="Toggle captions"
-            title="Captions"
-            className={`${ROUND} ${captionsOn ? "bg-tx-hi text-d-900 hover:bg-tx" : "bg-d-600 text-tx-hi hover:bg-d-500"}`}
-          >
-            <CcIcon />
-          </button>
-          <button
-            type="button"
-            data-testid="chat-toggle"
-            onClick={onToggleChat}
-            aria-pressed={chatOpen}
-            aria-label="Toggle transcript panel"
-            title="Transcript"
-            className={`${ROUND} ${chatOpen ? "bg-tx-hi text-d-900 hover:bg-tx" : "bg-d-600 text-tx-hi hover:bg-d-500"}`}
-          >
-            <ChatIcon />
-          </button>
-          <div className="relative">
-            <button
-              type="button"
-              data-testid="end-session"
-              onClick={onEndRequest}
-              disabled={state.status !== "running"}
-              aria-label="End discussion"
-              title="End discussion"
-              className={`${ROUND} w-16 bg-danger text-white hover:bg-danger/85`}
+        <div className="shrink-0 space-y-2 px-4 pb-1">
+          {p.captionsOn && !p.mobileTranscript && <Captions config={config} state={state} />}
+          <Notices {...p} turn={turn} />
+          <InterruptHint state={state} speakerMode={p.speakerMode} typed={typed} onInterrupt={p.onInterrupt} />
+        </div>
+      )}
+
+      {!lobby && (
+        <div className="flex shrink-0 items-start justify-center gap-1 px-4 pt-2 pb-4 sm:gap-1.5">
+          <Control label={typed ? "Typing" : state.muted ? "Unmute" : "Mute"}>
+            <IconButton
+              data-testid="mute-toggle"
+              onClick={p.onToggleMute}
+              disabled={typed || !running}
+              aria-pressed={state.muted}
+              aria-label={typed ? "Typing mode (no microphone)" : state.muted ? "Unmute (M)" : "Mute (M)"}
+              title={typed ? "Typing mode" : state.muted ? "Unmute (M)" : "Mute (M)"}
+              active={state.muted}
             >
-              <PhoneDownIcon className="h-6 w-6" />
-            </button>
-            {confirmEnd && (
-              <div
-                role="dialog"
-                aria-label="End discussion?"
-                className="absolute bottom-14 left-1/2 z-20 w-64 -translate-x-1/2 rounded-lg bg-d-800 p-3 shadow-xl ring-1 ring-d-950"
+              {typed ? <KeyboardIcon /> : state.muted ? <MicOffIcon /> : <MicIcon />}
+            </IconButton>
+          </Control>
+          <Control label="Raise Hand">
+            <IconButton
+              data-testid="raise-hand"
+              onClick={p.onRaiseHand}
+              disabled={!running || state.phase === "closing" || state.paused}
+              aria-pressed={state.handRaised}
+              aria-label="Raise hand (H)"
+              title={state.phase === "closing" ? "Not available in the closing round" : "Raise hand (H)"}
+              active={state.handRaised}
+            >
+              <HandIcon />
+            </IconButton>
+          </Control>
+          <Control label={state.pauseReason === "user" ? "Resume" : "Pause"}>
+            <IconButton
+              data-testid="pause-toggle"
+              onClick={p.onTogglePause}
+              disabled={!running || state.pauseReason === "offline"}
+              aria-pressed={state.pauseReason === "user"}
+              aria-label={state.pauseReason === "user" ? "Resume (P)" : "Pause (P)"}
+              title={state.pauseReason === "user" ? "Resume (P)" : "Pause (P)"}
+              active={state.pauseReason === "user"}
+            >
+              {state.pauseReason === "user" ? <PlayIcon /> : <PauseIcon />}
+            </IconButton>
+          </Control>
+          <Control label="Captions">
+            <IconButton
+              data-testid="cc-toggle"
+              onClick={p.onToggleCaptions}
+              aria-pressed={p.captionsOn}
+              aria-label="Captions (C)"
+              title="Captions (C)"
+              active={p.captionsOn}
+            >
+              <CcIcon />
+            </IconButton>
+          </Control>
+          <Control label="Transcript">
+            <IconButton
+              data-testid="chat-toggle"
+              onClick={p.onToggleChat}
+              aria-pressed={p.chatOpen}
+              aria-label="Transcript"
+              title="Transcript"
+              active={p.chatOpen}
+            >
+              <ChatIcon />
+            </IconButton>
+          </Control>
+          <div className="relative">
+            <Control label="End">
+              <IconButton
+                data-testid="end-session"
+                onClick={p.onEndRequest}
+                disabled={!running}
+                aria-label="End discussion"
+                title="End discussion"
+                tone="danger"
+                aria-haspopup="dialog"
+                aria-expanded={p.confirmEnd}
               >
-                <div className="text-[14px] font-semibold text-tx-hi">End discussion?</div>
-                <p className="mt-1 text-[12.5px] text-tx-lo">You&apos;ll get a report for what you&apos;ve said so far.</p>
-                <div className="mt-3 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={onEndCancel}
-                    className="rounded px-3 py-1.5 text-[13px] text-tx hover:underline focus-visible:outline-2 focus-visible:outline-blurple"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="end-confirm"
-                    onClick={onEndConfirm}
-                    autoFocus
-                    className="rounded bg-danger px-3 py-1.5 text-[13px] font-medium text-white hover:bg-danger/85 focus-visible:outline-2 focus-visible:outline-blurple"
-                  >
-                    End now
-                  </button>
-                </div>
-              </div>
-            )}
+                <PhoneDownIcon />
+              </IconButton>
+            </Control>
+            {p.confirmEnd && <EndConfirm onCancel={p.onEndCancel} onConfirm={p.onEndConfirm} />}
           </div>
         </div>
       )}
 
-      {/* overlays */}
-      {state.paused && (
-        <div data-testid="reconnecting" className="absolute inset-0 z-30 grid place-items-center bg-black/85" role="alert">
-          <div className="text-center">
-            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-[3px] border-d-500 border-t-tx-hi" />
-            <div className="text-[16px] font-semibold text-tx-hi">Reconnecting…</div>
-            <div className="mt-1 text-[13px] text-tx-lo">The timer is paused. Nothing is lost.</div>
-          </div>
-        </div>
+      {state.pauseReason === "offline" && (
+        <Overlay testId="reconnecting" role="alert">
+          <Spinner />
+          <div className="mt-3 text-sm font-medium text-fg">Reconnecting…</div>
+          <div className="mt-1 text-[13px] text-fg-2">Timer paused. Your session is safe.</div>
+        </Overlay>
+      )}
+      {state.pauseReason === "user" && (
+        <Overlay testId="paused-overlay" role="dialog" label="Paused">
+          <div className="text-sm font-medium text-fg">Paused</div>
+          <div className="mt-1 text-[13px] text-fg-2">The timer is stopped. Resume when you’re ready.</div>
+          <Button variant="primary" className="mt-4" data-testid="resume" onClick={p.onTogglePause}>
+            Resume
+            <Kbd>P</Kbd>
+          </Button>
+        </Overlay>
       )}
       {(state.status === "ending" || state.status === "ended") && (
-        <div className="absolute inset-0 z-30 grid place-items-center bg-black/85" role="status">
-          <div className="text-center">
-            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-[3px] border-d-500 border-t-tx-hi" />
-            <div className="text-[16px] font-semibold text-tx-hi">Preparing your report…</div>
-          </div>
-        </div>
+        <Overlay role="status">
+          <Spinner />
+          <div className="mt-3 text-sm font-medium text-fg">Preparing your report…</div>
+        </Overlay>
       )}
     </section>
+  );
+}
+
+/** "Your turn" cue: closing statement, or the moderator just acknowledged your raised hand. */
+export function yourTurn(state: EngineState): "closing" | "hand" | null {
+  if (state.yourClosingTurn) return "closing";
+  const last = state.utterances.at(-1);
+  if (state.handRaised && !state.live && last?.speaker === "mod") return "hand";
+  return null;
+}
+
+function Control({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex w-12 flex-col items-center gap-1 sm:w-[4.5rem]">
+      {children}
+      <span aria-hidden className="hidden text-[11px] whitespace-nowrap text-fg-3 sm:block">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function Overlay({ children, testId, role, label }: { children: ReactNode; testId?: string; role: string; label?: string }) {
+  return (
+    <div
+      data-testid={testId}
+      role={role}
+      aria-label={label}
+      className="absolute inset-0 z-30 grid place-items-center bg-canvas/80 backdrop-blur-sm"
+    >
+      <div className="flex flex-col items-center text-center">{children}</div>
+    </div>
+  );
+}
+
+function EndConfirm({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    boxRef.current?.querySelector<HTMLButtonElement>("[data-cancel]")?.focus();
+    const onDown = (e: PointerEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) onCancel();
+    };
+    // defer so the opening click doesn't close it
+    const t = setTimeout(() => document.addEventListener("pointerdown", onDown), 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("pointerdown", onDown);
+    };
+  }, [onCancel]);
+  return (
+    <div
+      ref={boxRef}
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="end-title"
+      className="absolute right-0 bottom-[4.5rem] z-20 w-72 rounded-xl border border-line-2 bg-surface p-4 shadow-lg sm:right-auto sm:left-1/2 sm:-translate-x-1/2"
+    >
+      <div id="end-title" className="text-sm font-medium text-fg">
+        End the discussion?
+      </div>
+      <p className="mt-1 text-[13px] text-fg-2">You’ll get a report on what you’ve said so far.</p>
+      <div className="mt-4 flex justify-end gap-2">
+        <Button size="sm" data-cancel onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button size="sm" variant="danger" data-testid="end-confirm" onClick={onConfirm}>
+          End Discussion
+        </Button>
+      </div>
+    </div>
   );
 }
 
 function Captions({ config, state }: { config: RoomConfig; state: EngineState }) {
   const live = state.live;
   const student = state.studentInterim;
+  const thinking = !live && !student && state.thinking ? speakerName(state.thinking, config.studentName) : null;
   return (
-    <div className="flex shrink-0 justify-center px-4 pb-3">
-      <div
-        data-testid="captions"
-        aria-live="polite"
-        className="min-h-[3.25rem] w-full max-w-3xl rounded-lg bg-d-900/90 px-4 py-2 text-[16px] leading-snug"
-      >
-        {student ? (
-          <p>
-            <span className="mr-2 text-[13px] font-semibold" style={{ color: speakerColor("you") }}>
-              {speakerName("you", config.studentName)}
-            </span>
-            <span className="text-tx-hi">{student}</span>
-          </p>
-        ) : live ? (
-          <p>
-            <span className="mr-2 text-[13px] font-semibold" style={{ color: speakerColor(live.speaker) }}>
-              {speakerName(live.speaker, config.studentName)}
-            </span>
-            <span className="text-tx-hi">{live.text.slice(0, live.shown)}</span>
-            <span className="text-tx-faint">{live.text.slice(live.shown)}</span>
-          </p>
-        ) : (
-          <p className="text-[13px] text-tx-faint">{state.thinking ? "…" : " "}</p>
-        )}
-      </div>
+    <div className="mx-auto min-h-14 w-full max-w-3xl" data-testid="captions" aria-live="polite">
+      {student || live ? (
+        <div className="rounded-xl border border-line bg-surface px-4 py-2.5 text-[15px] leading-snug">
+          <span className="mr-2 text-xs font-medium text-fg-3">{speakerName(student ? "you" : live!.speaker, config.studentName)}</span>
+          {student ? (
+            <span className="text-fg">{student}</span>
+          ) : (
+            <>
+              <span className="text-fg">{live!.text.slice(0, live!.shown)}</span>
+              <span className="text-fg-3">{live!.text.slice(live!.shown)}</span>
+            </>
+          )}
+        </div>
+      ) : thinking ? (
+        <p className="px-4 py-2.5 text-[13px] text-fg-3">{thinking} is about to speak…</p>
+      ) : null}
     </div>
   );
 }
 
-function ClosingBanner({ startedAt }: { startedAt: number | null }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(t);
-  }, []);
-  const left = Math.max(0, 30_000 - (now - (startedAt ?? now)));
-  return (
-    <div role="status" className="flex items-center gap-3 rounded-md bg-ok px-3 py-1.5 text-[13px] font-semibold text-white">
-      Your turn to conclude
-      <span className="font-mono tabular-nums">{fmtClock(left)}</span>
-    </div>
-  );
+function Notices(p: StageProps & { turn: "closing" | "hand" | null }) {
+  const { state } = p;
+  const typed = state.inputMode === "typed";
+  const items: ReactNode[] = [];
+
+  if (p.turn === "closing") {
+    items.push(
+      <Notice key="closing" tone="ok">
+        <span className="font-medium">Your turn to conclude.</span> Sum up the discussion and give your position in about 30 seconds.
+      </Notice>,
+    );
+  } else if (p.turn === "hand") {
+    items.push(
+      <Notice key="hand" tone="ok">
+        <span className="font-medium">Your turn.</span> {typed ? "Type your point now." : "Go ahead and speak."}
+      </Notice>,
+    );
+  } else if (state.handRaised) {
+    items.push(<Notice key="raised">Hand raised. The moderator will call on you after this speaker.</Notice>);
+  } else if (state.phase === "opening" && !state.live && !state.utterances.some((u) => u.speaker === "you")) {
+    items.push(
+      <Notice key="open">{typed ? "The floor is open. Type a point to open the discussion." : "The floor is open. Start speaking to open the discussion."}</Notice>,
+    );
+  }
+  if (state.notice) items.push(<Notice key="notice" tone="warn">{state.notice}</Notice>);
+  if (state.notHearingWords) {
+    items.push(
+      <Notice key="deaf" tone="warn">
+        Not catching your words. Check your mic or type your point.
+      </Notice>,
+    );
+  }
+  if (state.echoSuspected && !p.speakerMode) {
+    items.push(
+      <Notice key="echo" tone="warn" className="flex flex-wrap items-center justify-between gap-2">
+        <span>Sounds like echo. Use headphones, or switch to Space-to-interrupt.</span>
+        <Button size="sm" onClick={p.onSpeakerMode}>
+          Use Space to Interrupt
+        </Button>
+      </Notice>,
+    );
+  }
+  if (!items.length) return null;
+  return <div className="mx-auto w-full max-w-3xl space-y-2">{items}</div>;
 }
 
-function Lobby({
-  config,
-  inputMode,
-  starting,
-  onJoin,
+function InterruptHint({
+  state,
+  speakerMode,
+  typed,
+  onInterrupt,
 }: {
-  config: RoomConfig;
-  inputMode: "voice" | "typed";
-  starting: boolean;
-  onJoin: () => void;
+  state: EngineState;
+  speakerMode: boolean;
+  typed: boolean;
+  onInterrupt: () => void;
 }) {
-  const seats: SpeakerId[] = ["mod", ...config.personas];
+  const aiTalking = state.status === "running" && !state.paused && !!state.live && state.live.speaker !== "mod";
   return (
-    <div className="flex min-h-full items-center justify-center py-6">
-      <div className="w-full max-w-md rounded-lg bg-d-800 p-6 text-center">
-        <SpeakerIcon className="mx-auto h-8 w-8 text-tx-lo" />
-        <div className="mt-2 text-[12px] font-semibold tracking-wide text-tx-lo uppercase">gd-room</div>
-        <h2 className="mt-1 text-[18px] leading-snug font-semibold text-tx-hi">{config.topic}</h2>
-        <div className="mt-4 flex justify-center gap-1.5">
-          {seats.map((id) => (
-            <span key={id} title={speakerName(id, config.studentName)}>
-              <Avatar speaker={id} size={40} />
+    <div className="flex h-8 items-center justify-center gap-2 text-xs text-fg-3">
+      {aiTalking && (
+        <>
+          <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs" onClick={onInterrupt} data-testid="interrupt">
+            Interrupt
+            <span className="hidden [@media(pointer:fine)]:inline-flex">
+              <Kbd>Space</Kbd>
             </span>
-          ))}
-        </div>
-        <p className="mt-2 text-[13px] text-tx-lo">
-          {config.personas.length} AI participants and an AI moderator are waiting · {config.e2e ? "test run" : `${config.durationMin} min`}
-          {config.language === "hinglish" ? " · Hinglish" : ""}
-        </p>
-        <p className="mt-4 rounded-md bg-d-900 px-3 py-2 text-[12.5px] text-tx">
-          Everyone here except you is an AI. Their opinions, names and statistics are generated and may be inaccurate.
-        </p>
-        <div className="mt-4 text-[12.5px] text-tx-lo">
-          Input: <span className="font-medium text-tx-hi">{inputMode === "typed" ? "Typing" : "Microphone"}</span>
-          {" · "}
-          <Link href="/check" className="text-blurple hover:underline">
-            change
-          </Link>
-          {inputMode === "voice" && <span className="block pt-1 text-tx-faint">Headphones recommended. Just speak to cut in.</span>}
-        </div>
-        <button
-          type="button"
-          data-testid="join-voice"
-          onClick={onJoin}
-          disabled={starting}
-          className="mt-5 w-full rounded-md bg-ok py-2.5 text-[15px] font-semibold text-white hover:bg-ok/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ok disabled:opacity-60"
-        >
-          {starting ? "Starting…" : "Join voice"}
-        </button>
-        <Link href="/" className="mt-3 inline-block text-[12.5px] text-tx-lo hover:underline">
-          Back to setup
-        </Link>
-      </div>
+          </Button>
+          {!speakerMode && !typed && <span className="hidden sm:inline">or just start talking</span>}
+        </>
+      )}
     </div>
   );
 }

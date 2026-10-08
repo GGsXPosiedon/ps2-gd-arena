@@ -21,20 +21,6 @@
   --color-danger: #e5484d;
   --color-warn: #ffb224;
 
-  /* Legacy aliases (Discord-era names) mapped onto the Vercel palette. Migrate to the semantic tokens above. */
-  --color-d-950: #000000;
-  --color-d-900: #0a0a0a;
-  --color-d-800: #0a0a0a;
-  --color-d-700: #000000;
-  --color-d-600: #1a1a1a;
-  --color-d-500: #262626;
-  --color-d-400: #3d3d3d;
-  --color-tx: #ededed;
-  --color-tx-hi: #fafafa;
-  --color-tx-lo: #a1a1a1;
-  --color-tx-faint: #8f8f8f;
-  --color-blurple: #0070f3;
-  --color-blurple-hover: #0060d1;
 
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;

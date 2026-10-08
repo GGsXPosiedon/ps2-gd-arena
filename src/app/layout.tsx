@@ -15,7 +15,15 @@ export const viewport: Viewport = { themeColor: "#000000", colorScheme: "dark" }
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full bg-canvas text-fg">{children}</body>
+      <body className="min-h-full bg-canvas text-fg">
+        <a
+          href="#main"
+          className="sr-only rounded-md bg-fg px-3 py-2 text-sm font-medium text-canvas focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50"
+        >
+          Skip to Content
+        </a>
+        {children}
+      </body>
     </html>
   );
 }

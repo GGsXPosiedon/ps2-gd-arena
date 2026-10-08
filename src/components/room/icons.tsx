@@ -11,13 +11,6 @@ const base = {
   "aria-hidden": true,
 };
 
-export const SpeakerIcon = ({ className = "h-5 w-5" }: P) => (
-  <svg {...base} className={className}>
-    <path d="M11 5 6 9H3v6h3l5 4V5z" />
-    <path d="M15.5 8.5a5 5 0 0 1 0 7" />
-    <path d="M18.5 5.5a9 9 0 0 1 0 13" />
-  </svg>
-);
 
 export const MicIcon = ({ className = "h-5 w-5" }: P) => (
   <svg {...base} className={className}>
@@ -70,8 +63,29 @@ export const SendIcon = ({ className = "h-5 w-5" }: P) => (
   </svg>
 );
 
-export const HashIcon = ({ className = "h-5 w-5" }: P) => (
+
+export const PauseIcon = ({ className = "h-5 w-5" }: P) => (
   <svg {...base} className={className}>
-    <path d="M5 9h14M5 15h14M10 4 8 20M16 4l-2 16" />
+    <path d="M9 5v14M15 5v14" />
+  </svg>
+);
+
+export const PlayIcon = ({ className = "h-5 w-5" }: P) => (
+  <svg {...base} className={className}>
+    <path d="M7 5v14l11-7z" />
+  </svg>
+);
+
+
+export const KeyboardIcon = ({ className = "h-5 w-5" }: P) => (
+  <svg {...base} className={className}>
+    <rect x="2" y="6" width="20" height="12" rx="2" />
+    <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />
+  </svg>
+);
+
+export const CheckIcon = ({ className = "h-4 w-4" }: P) => (
+  <svg {...base} className={className}>
+    <path d="m5 12 5 5 9-10" />
   </svg>
 );

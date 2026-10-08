@@ -176,7 +176,6 @@ const wc = (t: string) => t.split(/\s+/).filter(Boolean).length;
 export function heuristicReport(req: ReportRequest): ReportResult {
   const { metrics: m, utterances } = req;
   const sn = req.config.studentName;
-  const topic = req.config.topic.replace(/[?.!]+$/, "");
   const mine = utterances.filter((u) => u.speaker === "you");
   const byId = new Map(utterances.map((u) => [u.id, u]));
   const aiName = (u?: Utterance) => (u && u.speaker !== "you" && u.speaker !== "mod" ? PERSONAS[u.speaker].name : "everyone");
@@ -242,7 +241,7 @@ export function heuristicReport(req: ReportRequest): ReportResult {
           ? `Someone else opened the discussion; your first point came ${fmtTime(m.firstEntryMs)} after the floor opened.`
           : "You never took the floor after it opened.",
         modOpen ?? first,
-        `I'd like to start by framing this: on "${topic}", the real question is who benefits and who pays. Let me take a clear position and then hear the group.`,
+        "Let me start by framing the question: who benefits, who pays, and over what time frame? I'll take a clear position, then I'd like to hear the group.",
       );
     }
     // ideas
@@ -254,7 +253,7 @@ export function heuristicReport(req: ReportRequest): ReportResult {
           "try",
           "Your points stayed general; they needed a concrete example, number or consequence to stand out.",
           longest,
-          `${longest.text.split(/[.!?]/)[0].trim()}, and here's a concrete example: …, which shows why this matters for ${topic.toLowerCase()}.`,
+          `${longest.text.split(/[.!?]/)[0].trim()}. For example, [name a company, a number or a news event]. That's why this matters.`,
         );
     }
     // building
@@ -279,13 +278,13 @@ export function heuristicReport(req: ReportRequest): ReportResult {
     } else if (m.interruptionsMade > 0) {
       const ev = req.events.find((e) => e.type === "interrupt" && e.by === "you");
       const u = ev ? mine.find((x) => x.start >= ev.t - 500) ?? mine[0] : mine[0];
-      push("interruptions", m.interruptionsMade >= 3 ? "try" : "good", m.interruptionsMade >= 3 ? "You cut others off several times; it can read as domineering." : "You stepped in to take the floor when you had a point to make.", u, "Sorry to jump in, I'll be quick: …");
-    } else push("interruptions", "good", "No one cut you off and you didn't talk over anyone; your turns were clean.", mine[0]);
+      push("interruptions", m.interruptionsMade >= 3 ? "try" : "good", m.interruptionsMade >= 3 ? "You cut others off several times; it can read as domineering." : "You stepped in to take the floor when you had a point to make.", u, "Sorry to jump in. One quick point, then I'll hand it back.");
+    } else push("interruptions", "good", "Not tested this round: nobody cut you off and you didn't talk over anyone.", mine[0]);
     // ending
     if (m.gaveClosing && closing) push("ending", "good", "You gave a clear closing statement in the final round.", closing);
     else {
       const u = closing ?? mine[mine.length - 1];
-      push("ending", "try", "Your ending didn't summarise the discussion or restate a clear position.", u, `To sum up, we heard strong points on both sides. My position is … because …, and the group seemed to agree that ….`);
+      push("ending", "try", "Your ending didn't summarise the discussion or restate a clear position.", u, `To sum up, we heard strong points on both sides. My position is [your stance], because [your strongest reason]. Where we agreed was [one shared point].`);
     }
   }
 

@@ -11,16 +11,16 @@ export const PHASES: { id: Exclude<Phase, "ended">; label: string }[] = [
   { id: "brief", label: "Brief" },
   { id: "opening", label: "Opening" },
   { id: "discussion", label: "Discussion" },
-  { id: "closing", label: "Closing round" },
+  { id: "closing", label: "Closing Round" },
 ];
 
 export const PHASE_LABEL: Record<Phase, string> = {
   brief: "Brief",
   opening: "Opening",
   discussion: "Discussion",
-  closing: "Closing round",
+  closing: "Closing Round",
   ended: "Ended",
 };
 
-/** Dark tile background tinted with the speaker colour. */
-export const tint = (color: string, pct = 18) => `color-mix(in srgb, ${color} ${pct}%, var(--color-d-900))`;
+/** Surface colour with a faint tint of the speaker colour. */
+export const tint = (color: string, pct = 4) => `color-mix(in srgb, ${color} ${pct}%, var(--color-surface))`;
