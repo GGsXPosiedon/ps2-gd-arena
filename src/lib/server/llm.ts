@@ -27,8 +27,8 @@ export function getProvider(): Provider {
       name: "gemini",
       baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
       apiKey: env.GEMINI_API_KEY,
-      fast: fastOverride || "gemini-2.5-flash-lite",
-      smart: smartOverride || "gemini-2.5-flash",
+      fast: fastOverride || "gemini-3.8-flash",
+      smart: smartOverride || "gemini-3.8-flash",
     };
   }
   if ((forced === "anthropic" || !forced) && env.ANTHROPIC_API_KEY) {
@@ -60,6 +60,8 @@ export interface LlmRequest {
   temperature?: number;
   json?: boolean;
   timeoutMs?: number;
+  /** Thinking effort for models that support it (Gemini 3.x can't turn it off, only down to "minimal"). */
+  reasoning?: "minimal" | "low" | "medium" | "high";
 }
 
 /** Streams text deltas. Throws on HTTP/network errors. Not for the mock provider. */
@@ -98,6 +100,7 @@ export async function* streamText(req: LlmRequest): AsyncGenerator<string> {
             temperature: req.temperature ?? 0.9,
             stream: true,
             ...(req.json ? { response_format: { type: "json_object" } } : {}),
+            ...(req.reasoning && p.name === "gemini" && /^gemini-3/.test(model) ? { reasoning_effort: req.reasoning } : {}),
             messages: [
               { role: "system", content: req.system },
               { role: "user", content: req.user },

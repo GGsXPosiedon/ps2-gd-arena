@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   const name = PERSONAS[req.speaker].name;
 
   // Pull the first chunk before responding so provider errors surface as HTTP errors (client retries).
-  const gen = streamText({ system, user, model: "fast", maxTokens, temperature: 0.95, timeoutMs: 12000 });
+  const gen = streamText({ system, user, model: "fast", maxTokens, temperature: 0.95, timeoutMs: 12000, reasoning: "minimal" });
   let first: IteratorResult<string>;
   try {
     first = await gen.next();

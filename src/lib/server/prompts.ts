@@ -47,7 +47,8 @@ export function buildTurnPrompt(req: TurnRequest): { system: string; user: strin
   };
 
   const user = `Discussion so far:\n${history}\n\n${instruction[req.intent]}\nNow say your line as ${p.name}.`;
-  return { system, user, maxTokens: req.intent === "interject" ? 60 : 140 };
+  // Generous limits: thinking tokens count toward them. Length is controlled by the prompt (word cap).
+  return { system, user, maxTokens: req.intent === "interject" ? 300 : 600 };
 }
 
 /** Cleans up common LLM artefacts so the line can be spoken. */

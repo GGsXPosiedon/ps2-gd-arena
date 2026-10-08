@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
   try {
     const { system, user } = buildReportPrompt(req);
-    const text = await completeText({ system, user, model: "smart", json: true, maxTokens: 3000, temperature: 0.3, timeoutMs: 45000 });
+    const text = await completeText({ system, user, model: "smart", json: true, maxTokens: 8000, temperature: 0.3, timeoutMs: 60000, reasoning: "medium" });
     const report = verifyReport(parseJsonObject<Partial<ReportResult>>(text), req.utterances);
     // An LLM reply with no usable evidence is no better than the heuristic.
     if (report.feedback.length === 0 && req.utterances.some((u) => u.speaker === "you")) throw new Error("no verified feedback");
