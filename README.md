@@ -66,3 +66,8 @@ bun run test:e2e     # Playwright, mock AI, typing mode; runs a full GD to the r
 ```
 
 Demo without a mic: open `/?e2e=1`. This runs a fast 40-second session with silent captions and typed input.
+
+## Development
+- Built with Next.js 16, React 19, and TypeScript.
+- Run `bun run lint` to check the code.
+- Run `bun run build` to create a production build.
