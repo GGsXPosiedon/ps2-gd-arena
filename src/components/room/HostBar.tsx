@@ -48,36 +48,47 @@ export function HostBar({ config, state, lobby }: { config: RoomConfig; state: E
     state.phase === "discussion" ? 1 - state.timeLeftMs / durationMs : state.phase === "closing" || ended ? 1 : 0;
 
   return (
-    <header data-testid="host-bar" className="relative shrink-0 border-b border-line">
-      <div className="flex items-center gap-3 px-4 py-2.5">
-        <Avatar speaker="mod" size={30} speaking={!!modLive} />
+    <header data-testid="host-bar" className="relative shrink-0 border-b border-line bg-canvas">
+      <div className="flex items-center gap-4 px-5 py-3 sm:px-8">
+        <Avatar speaker="mod" size={40} speaking={!!modLive} />
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-sm font-medium text-fg" title={config.topic}>
+          <p className="font-mono text-[11px] tracking-wide text-fg-3 uppercase">
+            Moderator <span className="text-line-2">·</span> Group discussion
+          </p>
+          <h1 className="font-display truncate text-[22px] leading-tight text-fg sm:text-[26px]" title={config.topic}>
             {config.topic}
           </h1>
-          <p className="line-clamp-2 text-[13px] leading-snug" aria-live="polite">
+          <p className="mt-0.5 line-clamp-1 text-[13px] leading-snug" aria-live="polite">
             {modLive ? (
               <>
-                <span className="text-fg-2">{modLive.text.slice(0, modLive.shown)}</span>
+                <span className="text-fg">{modLive.text.slice(0, modLive.shown)}</span>
                 <span className="text-fg-3">{modLive.text.slice(modLive.shown)}</span>
               </>
             ) : (
-              <span className="text-fg-3">{status(config, state, lobby)}</span>
+              <span className="text-fg-2">{status(config, state, lobby)}</span>
             )}
           </p>
         </div>
-        <div className="flex shrink-0 items-baseline gap-2">
-          <span data-testid="phase" className="hidden text-xs text-fg-3 sm:inline">
-            {lobby ? "Not Started" : PHASE_LABEL[state.phase]}
-          </span>
-          <span
-            data-testid="timer"
-            aria-live="off"
-            className={`font-mono text-base tabular-nums ${lowTime ? "text-danger" : "text-fg"}`}
-          >
-            {timer}
-          </span>
-          <ThemeToggle className="ml-1 size-7 self-center" />
+        <div className="flex shrink-0 items-center gap-4 sm:gap-6">
+          <div className="hidden text-right sm:block">
+            <div className="font-mono text-[11px] tracking-wide text-fg-3 uppercase">Phase</div>
+            <div data-testid="phase" className="font-display text-xl leading-tight text-fg italic">
+              {lobby ? "Not Started" : PHASE_LABEL[state.phase]}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="hidden font-mono text-[11px] tracking-wide text-fg-3 uppercase sm:block">
+              {state.phase === "discussion" ? "Time left" : "Time"}
+            </div>
+            <div
+              data-testid="timer"
+              aria-live="off"
+              className={`font-mono text-xl leading-tight tabular-nums sm:text-2xl ${lowTime ? "text-danger" : "text-fg"}`}
+            >
+              {timer}
+            </div>
+          </div>
+          <ThemeToggle className="size-8" />
         </div>
       </div>
       <div className="absolute inset-x-0 -bottom-px h-px" aria-hidden="true">

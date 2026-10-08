@@ -84,9 +84,12 @@ export const TranscriptPanel = forwardRef<
 
   return (
     <aside className={`flex min-h-0 flex-col bg-canvas ${className}`} aria-label="Transcript">
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-line px-4">
-        <h2 className="text-sm font-medium text-fg">Transcript</h2>
-        {utterances.length > 0 && <span className="text-xs text-fg-3 tabular-nums">{utterances.length} lines</span>}
+      <header className="flex shrink-0 items-end justify-between border-b border-line px-5 pt-4 pb-3">
+        <div>
+          <p className="font-mono text-[11px] tracking-wide text-fg-3 uppercase">Live</p>
+          <h2 className="font-display text-2xl leading-tight text-fg">Transcript</h2>
+        </div>
+        {utterances.length > 0 && <span className="pb-1 font-mono text-[11px] text-fg-3 tabular-nums">{utterances.length} lines</span>}
       </header>
 
       <div

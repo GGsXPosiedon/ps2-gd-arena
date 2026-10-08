@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AiTag, Avatar } from "@/components/Avatar";
+import { TableFigure } from "@/components/TableFigure";
 import { Button, IconButton, Kbd, Spinner, focusRing } from "@/components/ui";
 import type { EngineState } from "@/lib/engine";
-import { speakerName } from "@/lib/personas";
+import { PERSONAS, speakerName } from "@/lib/personas";
 import type { RoomConfig, SpeakerId } from "@/lib/types";
 import { ChatIcon, HandIcon, KeyboardIcon, MicIcon, MicOffIcon, PhoneDownIcon } from "./icons";
-import { HostBar } from "./HostBar";
-import { Tile } from "./Tile";
 
 export interface StageProps {
   config: RoomConfig;
@@ -35,108 +35,112 @@ export interface StageProps {
 
 export function Stage(p: StageProps) {
   const { config, state } = p;
-  // The moderator is the host (see HostBar), not a seat at the table.
-  const seats: SpeakerId[] = [...config.personas, "you"];
   const lobby = state.status === "idle" || state.status === "starting";
   const running = state.status === "running";
   const typed = state.inputMode === "typed";
   const turn = yourTurn(state);
-
-  const cols = seats.length <= 4 ? "grid-cols-2" : seats.length <= 6 ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2 sm:grid-cols-3 xl:grid-cols-4";
+  const aiSpeaking = state.live && state.live.speaker !== "mod" ? state.live.speaker : null;
 
   return (
     <section id="main" className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-canvas" aria-label="Discussion">
-      <HostBar config={config} state={state} lobby={lobby} />
-
       <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {p.mobileTranscript ? (
           <div className="flex h-full flex-col">{p.mobileTranscript}</div>
         ) : (
-          <div className="flex min-h-full items-center px-4 py-4">
-            <div className={`mx-auto grid w-full max-w-5xl gap-2 ${cols}`}>
-              {seats.map((id) => (
-                <Tile
-                  key={id}
-                  id={id}
-                  studentName={config.studentName}
-                  speaking={id === "you" ? state.studentSpeaking : state.live?.speaker === id}
-                  thinking={state.thinking === id}
-                  failed={state.failed === id}
-                  cutOff={!!p.cutOff[id]}
-                  muted={id === "you" && state.muted}
-                  typed={id === "you" && typed}
-                  handRaised={id === "you" && state.handRaised}
-                  highlight={id === "you" && !!turn}
-                />
-              ))}
-            </div>
+          // The table is the centrepiece: who is speaking, who is about to, who got cut off, your raised hand.
+          // The moderator is the host bar above, not a seat.
+          <div className="flex h-full min-h-[260px] items-center justify-center px-4 pt-3 pb-1 sm:px-8">
+            <TableFigure
+              personas={config.personas}
+              studentName={config.studentName}
+              showModerator={false}
+              live={{
+                speaking: aiSpeaking,
+                thinking: state.thinking,
+                failed: state.failed,
+                cutOff: p.cutOff,
+                studentSpeaking: state.studentSpeaking,
+                handRaised: state.handRaised,
+              }}
+              className="animate-rise h-full max-h-[540px] w-full max-w-[620px]"
+            />
           </div>
         )}
       </div>
 
       {!lobby && (
-        <div className="shrink-0 space-y-2 px-4 pt-1">
+        <div className="shrink-0 space-y-2 px-4 pt-1 sm:px-8">
           {p.captionsOn && !p.mobileTranscript && <Captions config={config} state={state} />}
           <StatusLine {...p} turn={turn} />
         </div>
       )}
 
       {!lobby && (
-        <div className="flex shrink-0 items-center justify-center gap-2 px-4 pt-2 pb-4">
-          <IconButton
-            data-testid="mute-toggle"
-            onClick={p.onToggleMute}
-            disabled={typed || !running}
-            aria-pressed={state.muted}
-            aria-label={typed ? "Typing mode (no microphone)" : state.muted ? "Unmute (M)" : "Mute (M)"}
-            title={typed ? "Typing mode" : state.muted ? "Unmute (M)" : "Mute (M)"}
-            active={state.muted}
-          >
-            {typed ? <KeyboardIcon /> : state.muted ? <MicOffIcon /> : <MicIcon />}
-          </IconButton>
-          <IconButton
-            data-testid="raise-hand"
-            onClick={p.onRaiseHand}
-            disabled={!running || state.phase === "closing" || state.paused}
-            aria-pressed={state.handRaised}
-            aria-label="Raise hand (H)"
-            title={state.phase === "closing" ? "Not available in the closing round" : "Raise hand (H)"}
-            active={state.handRaised}
-          >
-            <HandIcon />
-          </IconButton>
-          <IconButton
-            data-testid="chat-toggle"
-            onClick={p.onToggleChat}
-            aria-pressed={p.chatOpen}
-            aria-label="Transcript"
-            title="Transcript"
-            active={p.chatOpen}
-          >
-            <ChatIcon />
-          </IconButton>
-          <div className="relative">
+        <div className="flex shrink-0 items-start justify-center gap-3 px-4 pt-3 pb-5 sm:gap-5">
+          <Control label={typed ? "Keyboard" : state.muted ? "Unmute" : "Mic"}>
             <IconButton
-              data-testid="end-session"
-              onClick={p.onEndRequest}
-              disabled={!running}
-              aria-label="End discussion"
-              title="End discussion"
-              tone="danger"
-              aria-haspopup="dialog"
-              aria-expanded={p.confirmEnd}
+              data-testid="mute-toggle"
+              onClick={p.onToggleMute}
+              disabled={typed || !running}
+              aria-pressed={state.muted}
+              aria-label={typed ? "Typing mode (no microphone)" : state.muted ? "Unmute (M)" : "Mute (M)"}
+              title={typed ? "Typing mode" : state.muted ? "Unmute (M)" : "Mute (M)"}
+              active={state.muted}
             >
-              <PhoneDownIcon />
+              {typed ? <KeyboardIcon /> : state.muted ? <MicOffIcon /> : <MicIcon />}
             </IconButton>
-            {p.confirmEnd && <EndConfirm onCancel={p.onEndCancel} onConfirm={p.onEndConfirm} />}
-          </div>
-          <MoreMenu
-            paused={state.pauseReason === "user"}
-            canPause={running && state.pauseReason !== "offline"}
-            captionsOn={p.captionsOn}
-            onTogglePause={p.onTogglePause}
-            onToggleCaptions={p.onToggleCaptions}
-          />
+          </Control>
+          <Control label={state.handRaised ? "Hand raised" : "Raise hand"}>
+            <IconButton
+              data-testid="raise-hand"
+              onClick={p.onRaiseHand}
+              disabled={!running || state.phase === "closing" || state.paused}
+              aria-pressed={state.handRaised}
+              aria-label="Raise hand (H)"
+              title={state.phase === "closing" ? "Not available in the closing round" : "Raise hand (H)"}
+              active={state.handRaised}
+            >
+              <HandIcon />
+            </IconButton>
+          </Control>
+          <Control label="Transcript">
+            <IconButton
+              data-testid="chat-toggle"
+              onClick={p.onToggleChat}
+              aria-pressed={p.chatOpen}
+              aria-label="Transcript"
+              title="Transcript"
+              active={p.chatOpen}
+            >
+              <ChatIcon />
+            </IconButton>
+          </Control>
+          <Control label="More">
+            <MoreMenu
+              paused={state.pauseReason === "user"}
+              canPause={running && state.pauseReason !== "offline"}
+              captionsOn={p.captionsOn}
+              onTogglePause={p.onTogglePause}
+              onToggleCaptions={p.onToggleCaptions}
+            />
+          </Control>
+          <Control label="End">
+            <div className="relative">
+              <IconButton
+                data-testid="end-session"
+                onClick={p.onEndRequest}
+                disabled={!running}
+                aria-label="End discussion"
+                title="End discussion"
+                tone="danger"
+                aria-haspopup="dialog"
+                aria-expanded={p.confirmEnd}
+              >
+                <PhoneDownIcon />
+              </IconButton>
+              {p.confirmEnd && <EndConfirm onCancel={p.onEndCancel} onConfirm={p.onEndConfirm} />}
+            </div>
+          </Control>
         </div>
       )}
 
@@ -209,9 +213,9 @@ function EndConfirm({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: 
       role="dialog"
       aria-modal="false"
       aria-labelledby="end-title"
-      className="absolute right-0 bottom-[4.5rem] z-20 w-72 rounded-xl border border-line-2 bg-surface p-4 shadow-lg sm:right-auto sm:left-1/2 sm:-translate-x-1/2"
+      className="absolute right-0 bottom-full z-20 mb-3 w-72 rounded-2xl border border-line-2 bg-surface p-4 shadow-lg sm:right-auto sm:left-1/2 sm:-translate-x-1/2"
     >
-      <div id="end-title" className="text-sm font-medium text-fg">
+      <div id="end-title" className="font-display text-xl text-fg">
         End the discussion?
       </div>
       <p className="mt-1 text-[13px] text-fg-2">You’ll get a report on what you’ve said so far.</p>
@@ -230,24 +234,59 @@ function EndConfirm({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: 
 function Captions({ config, state }: { config: RoomConfig; state: EngineState }) {
   const live = state.live && state.live.speaker !== "mod" ? state.live : null; // moderator lines show in the host bar
   const student = state.studentInterim;
-  const thinking = !live && !student && state.thinking ? speakerName(state.thinking, config.studentName) : null;
+  const who: SpeakerId | null = student ? "you" : live ? live.speaker : null;
+  const thinking = !who && state.thinking ? state.thinking : null;
   return (
-    <div className="mx-auto min-h-14 w-full max-w-3xl" data-testid="captions" aria-live="polite">
-      {student || live ? (
-        <div className="rounded-xl border border-line bg-surface px-4 py-2.5 text-[15px] leading-snug">
-          <span className="mr-2 text-xs font-medium text-fg-3">{speakerName(student ? "you" : live!.speaker, config.studentName)}</span>
-          {student ? (
-            <span className="text-fg">{student}</span>
-          ) : (
-            <>
-              <span className="text-fg">{live!.text.slice(0, live!.shown)}</span>
-              <span className="text-fg-3">{live!.text.slice(live!.shown)}</span>
-            </>
-          )}
-        </div>
-      ) : thinking ? (
-        <p className="px-4 py-2.5 text-[13px] text-fg-3">{thinking} is about to speak…</p>
-      ) : null}
+    <div className="mx-auto w-full max-w-3xl" data-testid="captions" aria-live="polite">
+      <div className="flex min-h-[84px] items-start gap-3 rounded-2xl border border-line bg-surface px-5 py-4">
+        {who ? (
+          <>
+            <Avatar speaker={who} studentName={config.studentName} size={36} speaking />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[13px] font-medium text-fg">{speakerName(who, config.studentName)}</span>
+                {who !== "you" && <AiTag />}
+                {who !== "you" && who !== "mod" && (
+                  <span className="font-mono text-[11px] tracking-wide text-fg-3 uppercase">{PERSONAS[who].archetype}</span>
+                )}
+              </div>
+              <p className="mt-1 text-lg leading-snug text-balance sm:text-xl">
+                {student ? (
+                  <span className="text-fg">{student}</span>
+                ) : (
+                  <>
+                    <span className="text-fg">{live!.text.slice(0, live!.shown)}</span>
+                    <span className="text-fg-3">{live!.text.slice(live!.shown)}</span>
+                  </>
+                )}
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="flex min-h-[52px] items-center gap-3 text-[15px] text-fg-3">
+            {thinking ? (
+              <>
+                <Avatar speaker={thinking} studentName={config.studentName} size={28} />
+                {speakerName(thinking, config.studentName)} is about to speak…
+              </>
+            ) : (
+              <span className="font-display text-xl italic">Listening…</span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Round control with a small label under it. */
+function Control({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex w-16 flex-col items-center gap-1.5">
+      {children}
+      <span className="text-[11px] whitespace-nowrap text-fg-3" aria-hidden="true">
+        {label}
+      </span>
     </div>
   );
 }
@@ -298,14 +337,20 @@ function StatusLine(p: StageProps & { turn: "closing" | "hand" | null }) {
   } else if (state.handRaised) {
     message = "Hand raised. The moderator will call on you after this speaker.";
   } else if (state.phase === "opening" && !state.live && !state.utterances.some((u) => u.speaker === "you")) {
-    message = typed ? "The floor is open. Type a point to open the discussion." : "The floor is open. Start speaking to open the discussion.";
+    message = typed
+      ? "The floor is open. Type a point to open the discussion."
+      : "The floor is open. Start speaking to open the discussion.";
   } else if (state.ttsSilent && !config.e2e) {
     message = "Captions only: no voices in this browser.";
   }
 
   const color = tone === "ok" ? "text-ok" : tone === "warn" ? "text-warn" : "text-fg-3";
   return (
-    <div className="mx-auto flex min-h-8 w-full max-w-3xl items-center justify-center gap-3 text-center text-[13px]" role="status" aria-live="polite">
+    <div
+      className="mx-auto flex min-h-8 w-full max-w-3xl items-center justify-center gap-3 text-center text-[13px]"
+      role="status"
+      aria-live="polite"
+    >
       {message && <span className={color}>{message}</span>}
       {action}
       {aiTalking && (
@@ -359,12 +404,14 @@ function MoreMenu({
         title="More"
         aria-haspopup="menu"
         aria-expanded={open}
-        className="size-9"
       >
         <MoreIcon />
       </IconButton>
       {open && (
-        <div role="menu" className="absolute right-0 bottom-12 z-20 w-48 rounded-xl border border-line-2 bg-surface p-1 shadow-lg">
+        <div
+          role="menu"
+          className="absolute bottom-full left-1/2 z-20 mb-3 w-48 -translate-x-1/2 rounded-2xl border border-line-2 bg-surface p-1 shadow-lg"
+        >
           <button
             type="button"
             role="menuitem"

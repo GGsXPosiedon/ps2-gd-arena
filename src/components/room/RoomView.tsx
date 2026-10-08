@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import type { GDEngine } from "@/lib/engine";
 import type { RoomConfig, SpeakerId } from "@/lib/types";
 import { SiteHeader } from "@/components/SiteHeader";
+import { HostBar } from "./HostBar";
 import { Lobby } from "./Lobby";
 import { Stage, yourTurn } from "./Stage";
 import { TranscriptPanel } from "./TranscriptPanel";
@@ -153,44 +154,54 @@ export function RoomView({
       <div data-testid="room" className="flex min-h-dvh flex-col bg-canvas">
         <SiteHeader wide />
         <main id="main" className="flex flex-1 items-center justify-center px-4 py-10">
-          <Lobby config={config} inputMode={inputMode} speakerMode={speakerMode} starting={state.status === "starting"} onJoin={() => engine.start()} />
+          <Lobby
+            config={config}
+            inputMode={inputMode}
+            speakerMode={speakerMode}
+            starting={state.status === "starting"}
+            onJoin={() => engine.start()}
+          />
         </main>
       </div>
     );
   }
 
+  const lobby = state.status === "idle" || state.status === "starting";
   return (
-    <div data-testid="room" className="flex h-dvh overflow-hidden bg-canvas">
-      <Stage
-        config={config}
-        state={state}
-        inputMode={inputMode}
-        speakerMode={speakerMode}
-        captionsOn={captionsOn}
-        chatOpen={chatOpen}
-        cutOff={cutOff}
-        confirmEnd={confirmEnd}
-        mobileTranscript={!isDesktop && chatOpen ? transcript : null}
-        onJoin={() => engine.start()}
-        onToggleMute={() => engine.toggleMute()}
-        onRaiseHand={() => engine.raiseHand()}
-        onTogglePause={togglePause}
-        onToggleCaptions={() => setCaptionsOn((v) => !v)}
-        onToggleChat={() => setChatPref(!chatOpen)}
-        onEndRequest={() => setConfirmEnd((v) => !v)}
-        onEndCancel={() => setConfirmEnd(false)}
-        onEndConfirm={() => {
-          setConfirmEnd(false);
-          engine.end();
-        }}
-        onSpeakerMode={() => engine.setSpeakerMode(true)}
-        onFinishNow={() => engine.finishNow()}
-        onInterrupt={() => {
-          engine.interrupt();
-          if (engine.getState().inputMode === "typed") composerRef.current?.focus();
-        }}
-      />
-      {isDesktop && chatOpen && <div className="flex w-96 shrink-0 border-l border-line">{transcript}</div>}
+    <div data-testid="room" className="flex h-dvh flex-col overflow-hidden bg-canvas">
+      <HostBar config={config} state={state} lobby={lobby} />
+      <div className="flex min-h-0 flex-1">
+        <Stage
+          config={config}
+          state={state}
+          inputMode={inputMode}
+          speakerMode={speakerMode}
+          captionsOn={captionsOn}
+          chatOpen={chatOpen}
+          cutOff={cutOff}
+          confirmEnd={confirmEnd}
+          mobileTranscript={!isDesktop && chatOpen ? transcript : null}
+          onJoin={() => engine.start()}
+          onToggleMute={() => engine.toggleMute()}
+          onRaiseHand={() => engine.raiseHand()}
+          onTogglePause={togglePause}
+          onToggleCaptions={() => setCaptionsOn((v) => !v)}
+          onToggleChat={() => setChatPref(!chatOpen)}
+          onEndRequest={() => setConfirmEnd((v) => !v)}
+          onEndCancel={() => setConfirmEnd(false)}
+          onEndConfirm={() => {
+            setConfirmEnd(false);
+            engine.end();
+          }}
+          onSpeakerMode={() => engine.setSpeakerMode(true)}
+          onFinishNow={() => engine.finishNow()}
+          onInterrupt={() => {
+            engine.interrupt();
+            if (engine.getState().inputMode === "typed") composerRef.current?.focus();
+          }}
+        />
+        {isDesktop && chatOpen && <div className="flex w-96 shrink-0 border-l border-line">{transcript}</div>}
+      </div>
     </div>
   );
 }
