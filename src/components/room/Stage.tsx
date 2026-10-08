@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Badge, Button, IconButton, Kbd, Notice, Spinner } from "@/components/ui";
 import type { EngineState } from "@/lib/engine";
 import { speakerName } from "@/lib/personas";
@@ -31,6 +31,7 @@ export interface StageProps {
   onEndConfirm: () => void;
   onSpeakerMode: () => void;
   onInterrupt: () => void;
+  onFinishNow?: () => void;
 }
 
 export function Stage(p: StageProps) {
@@ -210,6 +211,7 @@ export function Stage(p: StageProps) {
         <Overlay role="status">
           <Spinner />
           <div className="mt-3 text-sm font-medium text-fg">Preparing your report…</div>
+          {p.onFinishNow && <SlowFinish onFinishNow={p.onFinishNow} />}
         </Overlay>
       )}
     </section>
@@ -383,5 +385,20 @@ function InterruptHint({
         </>
       )}
     </div>
+  );
+}
+
+/** Appears if wrapping up takes more than a few seconds, so the student is never stuck. */
+function SlowFinish({ onFinishNow }: { onFinishNow: () => void }) {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setShow(true), 8000);
+    return () => clearTimeout(t);
+  }, []);
+  if (!show) return null;
+  return (
+    <Button variant="secondary" size="sm" className="mt-4" data-testid="view-report-now" onClick={onFinishNow}>
+      View Report Now
+    </Button>
   );
 }

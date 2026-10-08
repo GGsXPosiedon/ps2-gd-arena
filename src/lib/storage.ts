@@ -42,9 +42,24 @@ export function saveConfig(config: RoomConfig) {
 }
 
 export function saveSession(s: SessionRecord) {
-  localStorage.setItem(sessionKey(s.id), JSON.stringify(s));
   const ids = listSessionIds().filter((x) => x !== s.id);
-  localStorage.setItem(SESSIONS_KEY, JSON.stringify([s.id, ...ids].slice(0, 50)));
+  const write = () => {
+    localStorage.setItem(sessionKey(s.id), JSON.stringify(s));
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify([s.id, ...ids].slice(0, 50)));
+  };
+  try {
+    write();
+  } catch {
+    // Storage full: drop the oldest sessions until it fits.
+    while (ids.length) {
+      localStorage.removeItem(sessionKey(ids.pop()!));
+      try {
+        write();
+        return;
+      } catch {}
+    }
+    throw new Error("Could not save the session: browser storage is full");
+  }
 }
 
 export function loadSession(id: string): SessionRecord | null {

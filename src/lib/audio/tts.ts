@@ -305,9 +305,20 @@ export class VoiceBank {
           const a = new Audio(url);
           audio = a;
           this.playing.add(a);
-          a.onended = () => {
+          let advanced = false;
+          const advance = () => {
+            if (advanced || stopped || settled) return;
+            advanced = true;
             offset += chunks[i].length + 1;
             playChunk(i + 1);
+          };
+          a.onended = advance;
+          // Watchdog: if "ended" never fires, move on after the clip's length (+ slack).
+          a.onloadedmetadata = () => {
+            const ms = (isFinite(a.duration) ? a.duration * 1000 : chunks[i].length * 90) + 3000;
+            setTimeout(() => {
+              if (audio === a) advance();
+            }, ms);
           };
           a.onerror = () => fallback();
           progressTimer = setInterval(() => onProgress?.(charsAt()), 100);

@@ -162,6 +162,7 @@ export function RoomView({ engine, config, inputMode }: { engine: GDEngine; conf
           engine.end();
         }}
         onSpeakerMode={() => engine.setSpeakerMode(true)}
+        onFinishNow={() => engine.finishNow()}
         onInterrupt={() => {
           engine.interrupt();
           if (engine.getState().inputMode === "typed") composerRef.current?.focus();

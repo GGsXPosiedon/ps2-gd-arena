@@ -56,6 +56,9 @@ export interface EngineState {
 class Stopped extends Error {}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Resolves to `fallback` if `p` hasn't settled within `ms` (never rejects). */
+const within = <T,>(p: Promise<T> | undefined, ms: number, fallback: T): Promise<T> =>
+  Promise.race([Promise.resolve(p).catch(() => fallback), sleep(ms).then(() => fallback)]) as Promise<T>;
 const words = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
 const normText = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, "").replace(/\s+/g, " ").trim();
 
@@ -985,27 +988,22 @@ export class GDEngine {
     if (!started) await this.say("mod", L.studentSkipped);
   }
 
-  private async finish(sayThanks: boolean) {
-    if (this.s.status === "ending" || this.s.status === "ended") return;
-    this.set({ status: "ending", thinking: null, notice: null });
-    if (sayThanks && !this.stopped) await this.say("mod", moderatorLines(this.cfg.language).thanks).catch(() => {});
+  /** Saves whatever exists right now and ends the session (escape hatch if finishing ever stalls). */
+  finishNow() {
+    if (this.s.status === "ended") return;
     this.current?.handle.stop();
     this.commitTurn();
     if (!this.discussionEnd) {
       this.pauseClock();
       this.discussionEnd = this.now();
     }
-    this.setPhase("ended");
     this.stt?.stop();
-    const blob = await this.recording?.stop().catch(() => null);
     this.mic?.stop();
-    let hasAudio = false;
-    if (blob) {
-      try {
-        await saveAudio(this.sessionId, blob);
-        hasAudio = true;
-      } catch {}
-    }
+    this.saveAndEnd(false);
+  }
+
+  private saveAndEnd(hasAudio: boolean) {
+    if (this.s.status === "ended") return;
     const record: SessionRecord = {
       id: this.sessionId,
       createdAt: new Date().toISOString(),
@@ -1019,7 +1017,30 @@ export class GDEngine {
       hasAudio,
       audioStartOffset: this.audioStartOffset,
     };
-    saveSession(record);
-    this.set({ status: "ended", sessionId: record.id });
+    try {
+      saveSession(record);
+    } catch (e) {
+      console.error("[engine] could not save the session", e);
+    }
+    this.set({ status: "ended", sessionId: record.id, phase: "ended" });
+  }
+
+  private async finish(sayThanks: boolean) {
+    if (this.s.status === "ending" || this.s.status === "ended") return;
+    this.set({ status: "ending", thinking: null, notice: null });
+    // Every step below is time-boxed so a stalled voice, recorder or storage call can't block the report.
+    if (sayThanks && !this.stopped) await within(this.say("mod", moderatorLines(this.cfg.language).thanks).then(() => true), 12_000, false);
+    this.current?.handle.stop();
+    this.commitTurn();
+    if (!this.discussionEnd) {
+      this.pauseClock();
+      this.discussionEnd = this.now();
+    }
+    this.setPhase("ended");
+    this.stt?.stop();
+    const blob = await within(this.recording?.stop(), 3000, null);
+    this.mic?.stop();
+    const hasAudio = blob ? await within(saveAudio(this.sessionId, blob).then(() => true), 4000, false) : false;
+    this.saveAndEnd(hasAudio);
   }
 }
