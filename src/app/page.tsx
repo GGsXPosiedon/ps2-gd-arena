@@ -550,6 +550,7 @@ export default function SetupPage() {
                 onModeChange={setInputChoice}
                 speakerMode={!!config.speakerMode}
                 onSpeakerModeChange={(speakerMode) => update({ speakerMode })}
+                language={config.language}
               />
 
               <div className="py-1.5">

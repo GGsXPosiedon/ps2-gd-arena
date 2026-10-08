@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Segmented } from "@/components/ui";
 import { MicError, openMic, type MicHandle } from "@/lib/audio/mic";
+import { createListener, type Listener } from "@/lib/audio/listener";
 import { Recognizer, sttSupported } from "@/lib/audio/stt";
+import { transcribe } from "@/lib/audio/transcribe";
 
 export type InputChoice = "mic" | "keyboard";
 type Listen = "headphones" | "speakers";
@@ -18,11 +20,13 @@ export function MicTest({
   onModeChange,
   speakerMode,
   onSpeakerModeChange,
+  language = "english",
 }: {
   mode: InputChoice;
   onModeChange: (m: InputChoice) => void;
   speakerMode: boolean;
   onSpeakerModeChange: (on: boolean) => void;
+  language?: "english" | "hinglish";
 }) {
   const [state, setState] = useState<MicState>("idle");
   const [heard, setHeard] = useState("");
@@ -30,6 +34,7 @@ export function MicTest({
   const [note, setNote] = useState<string | null>(null);
   const micRef = useRef<MicHandle | null>(null);
   const recRef = useRef<Recognizer | null>(null);
+  const listenerRef = useRef<Listener | null>(null);
   const barRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const changeRef = useRef(onModeChange);
@@ -42,6 +47,8 @@ export function MicTest({
     rafRef.current = null;
     recRef.current?.stop();
     recRef.current = null;
+    listenerRef.current?.destroy();
+    listenerRef.current = null;
     micRef.current?.stop();
     micRef.current = null;
   };
@@ -49,13 +56,7 @@ export function MicTest({
   // Default to Keyboard when live transcription isn't available or the mic is already blocked.
   useEffect(() => {
     let alive = true;
-    if (!sttSupported()) {
-      Promise.resolve().then(() => {
-        if (!alive) return;
-        setNote("Live transcription needs Chrome or Edge. You can take part by typing.");
-        changeRef.current("keyboard");
-      });
-    } else {
+    {
       navigator.permissions
         ?.query({ name: "microphone" as PermissionName })
         .then((p) => {
@@ -91,13 +92,30 @@ export function MicTest({
       const mic = await openMic();
       micRef.current = mic;
       setState("ok");
-      mic.onVoice(setVoice);
       const tick = () => {
         if (barRef.current) barRef.current.style.transform = `scaleX(${Math.min(1, mic.level() * 1.6)})`;
         rafRef.current = requestAnimationFrame(tick);
       };
       tick();
-      if (sttSupported()) {
+      // Same pipeline as the room: neural VAD finds your sentence, the server transcribes it.
+      const listener = await createListener(mic.stream, {
+        onSpeechStart: () => setVoice(true),
+        onSpeechEnd: (audio) => {
+          setVoice(false);
+          setHeard((h) => h || "…");
+          transcribe(audio, language)
+            .then((t) => t && setHeard(t))
+            .catch(() => setNote("Couldn't transcribe that. Check your connection and try again."));
+        },
+        onMisfire: () => setVoice(false),
+      });
+      if (listener) {
+        listenerRef.current = listener;
+        listener.start();
+      } else {
+        mic.onVoice(setVoice); // loudness detector fallback
+      }
+      if (!listener && sttSupported()) {
         let finals = "";
         const rec = new Recognizer({
           lang: "en-IN",

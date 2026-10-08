@@ -51,6 +51,7 @@ All audio handling runs in the browser; the server only holds API keys.
 
 - `src/lib/engine.ts`: the floor manager (phases, timer, who speaks next, barge-in, interjections, prefetching the next AI line while the current one plays, failure fallbacks)
 - `src/lib/audio/`: microphone + voice activity detection (`mic.ts`), Web Speech transcription (`stt.ts`), one voice per seat (`tts.ts`), session recording (`recorder.ts`)
+- `src/app/api/stt`: transcribes each of your turns server-side (Sarvam saaras, Gemini fallback; silent clips are skipped)
 - `src/app/api/turn`: generates one participant's line (persona prompt in `src/lib/server/prompts.ts`)
 - `src/app/api/report`: LLM feedback that must cite utterance ids; quotes are verified against the transcript (`src/lib/server/report.ts`); rule-based fallback if the LLM is unavailable
 - `src/lib/metrics.ts`: deterministic numbers (talk share, interruptions, entry time, fillers, pace)

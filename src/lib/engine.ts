@@ -2,7 +2,9 @@
 // One brain decides who holds the floor; each AI seat speaks through its own voice.
 import { MicError, openMic, type MicHandle } from "./audio/mic";
 import { startRecording, type Recording } from "./audio/recorder";
+import { createListener, type Listener } from "./audio/listener";
 import { Recognizer, sttSupported } from "./audio/stt";
+import { transcribe } from "./audio/transcribe";
 import { GeminiRecognizer, geminiSttAvailable } from "./audio/stt-gemini";
 import { VoiceBank, type SpeakHandle } from "./audio/tts";
 import { moderatorLines } from "./moderator";
@@ -73,6 +75,7 @@ interface StudentTurn {
   interim: string;
   lastActivity: number;
   interruptedBy?: SpeakerId;
+  pending: Promise<string>[]; // server transcripts of this turn's speech segments, in order
 }
 
 export class GDEngine {
@@ -96,6 +99,12 @@ export class GDEngine {
   private audioStartOffset = 0;
   private current: { handle: SpeakHandle; speaker: SpeakerId; id: string; interruptible: boolean } | null = null;
   private bargedIn = false;
+  // Voice input: neural VAD + per-turn server transcription when available (see setupVoice).
+  private listener: Listener | null = null;
+  private serverStt = false;
+  private webSpeech = false;
+  private pendingCommits = 0;
+  private lastCommitServer = false;
   private currentStart = 0;
 
   // turn state
@@ -198,7 +207,10 @@ export class GDEngine {
   toggleMute() {
     const muted = !this.s.muted;
     this.set({ muted, studentSpeaking: false, studentInterim: muted ? "" : this.s.studentInterim });
-    if (muted) this.commitTurn();
+    if (muted) {
+      this.listener?.pause();
+      this.commitTurn();
+    } else this.listener?.start();
   }
 
   sendTyped(raw: string) {
@@ -217,6 +229,7 @@ export class GDEngine {
     this.current?.handle.stop();
     this.bank?.cancelAll();
     this.stt?.stop();
+    this.listener?.destroy();
     this.mic?.stop();
     if (this.tick) clearInterval(this.tick);
     window.removeEventListener("offline", this.onOffline);
@@ -254,7 +267,7 @@ export class GDEngine {
   private onTick() {
     if (this.s.phase === "discussion") this.set({ timeLeftMs: Math.max(0, this.T.durationMs - this.discElapsed()) });
     // VAD events can be ignored while an AI talks (echo guard); resync once the floor is free.
-    if (this.mic && this.turn && !this.aiSpeaking() && !this.s.muted) {
+    if (this.mic && !this.listener && this.turn && !this.aiSpeaking() && !this.s.muted) {
       const v = this.mic.isVoice();
       if (v) this.turn.lastActivity = this.now();
       if (v !== this.s.studentSpeaking) this.set({ studentSpeaking: v });
@@ -262,7 +275,8 @@ export class GDEngine {
     this.checkStudentTurnEnd();
     this.maybeInterject();
     const t = this.turn;
-    const deaf = !!t && this.s.studentSpeaking && !t.finals.length && !t.interim && this.now() - t.start > 3000;
+    // Only meaningful when the live recognizer is the source of words (server transcription comes after the turn).
+    const deaf = !this.serverStt && !!t && this.s.studentSpeaking && !t.finals.length && !t.interim && this.now() - t.start > 3000;
     if (deaf !== this.s.notHearingWords) this.set({ notHearingWords: deaf });
   }
 
@@ -366,12 +380,45 @@ export class GDEngine {
     }
     this.recording = startRecording(this.mic.stream);
     this.audioStartOffset = this.now();
-    this.mic.onVoice((speaking) => this.onVoice(speaking));
-    const useGemini = await geminiSttAvailable().catch(() => false);
-    if (!useGemini && !sttSupported()) {
-      this.set({ micError: "Live transcription needs Chrome or Edge. Your voice can interrupt, but please type your points." });
+    // Neural VAD (reliable start/end of speech, also on phones) + accurate server transcription per turn.
+    // If the model can't load, fall back to the loudness detector and the browser recognizer alone.
+    this.listener = await createListener(
+      this.mic.stream,
+      {
+        onSpeechStart: () => this.onVoice(true),
+        onSpeechEnd: (audio) => this.onSegment(audio),
+        onMisfire: () => this.onVoice(false),
+      },
+      { redemptionMs: Math.min(1100, Math.max(500, Math.round(this.T.patience * 0.6))) },
+    ).catch(() => null);
+    if (this.listener) {
+      this.serverStt = true;
+      this.listener.start();
+    } else {
+      this.mic.onVoice((speaking) => this.onVoice(speaking));
     }
+    // Live captions come from the browser recognizer. On phones it competes with the app for the microphone
+    // (Android) or barely works (iOS), so when server transcription is available we skip it there.
+    const mobile = matchMedia("(pointer: coarse)").matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
+    const useGemini = await geminiSttAvailable().catch(() => false);
+    if (this.serverStt && mobile && !useGemini) return;
+    if (!useGemini && !sttSupported()) {
+      if (!this.serverStt) {
+        this.set({ micError: "Live transcription needs Chrome or Edge. Your voice can interrupt, but please type your points." });
+      }
+      return;
+    }
+    this.webSpeech = true;
     this.startStt(useGemini);
+  }
+
+  /** A speech segment ended (neural VAD): transcribe it on the server as part of the current turn. */
+  private onSegment(audio: Float32Array) {
+    if (this.s.muted || this.s.paused || this.s.status !== "running") return;
+    const turn = this.turn;
+    this.onVoice(false);
+    if (!turn) return; // the speech was treated as echo (an AI was talking)
+    turn.pending.push(transcribe(audio, this.cfg.language).catch(() => ""));
   }
 
   /** Gemini live transcription when configured (better for Hinglish), else the browser recognizer. */
@@ -431,8 +478,10 @@ export class GDEngine {
     }
     const now = this.now();
     if (!this.turn) {
-      // A late final for a turn we just committed: append to it.
       const last = this.s.utterances.at(-1);
+      // The server already transcribed the turn we just committed; late recognizer results would duplicate it.
+      if (this.lastCommitServer && last?.speaker === "you" && !last.typed && now - last.end < 2500) return;
+      // A late final for a turn we just committed: append to it.
       if (final && last?.speaker === "you" && !last.typed && now - last.end < 1500) {
         const a = normText(last.text);
         const b = normText(text);
@@ -455,20 +504,22 @@ export class GDEngine {
 
   private beginTurn() {
     if (this.turn) return;
-    this.turn = { start: Math.max(0, this.now() - 250), finals: [], interim: "", lastActivity: this.now() };
+    this.turn = { start: Math.max(0, this.now() - 250), finals: [], interim: "", lastActivity: this.now(), pending: [] };
     this.spec = null;
   }
 
   private studentHasFloor() {
-    return !!this.turn || this.s.studentSpeaking;
+    // A turn waiting for its server transcript still holds the floor, so no one replies to half a line.
+    return !!this.turn || this.s.studentSpeaking || this.pendingCommits > 0;
   }
 
   private checkStudentTurnEnd() {
     const turn = this.turn;
     if (!turn || this.s.studentSpeaking) return;
     const silence = this.now() - turn.lastActivity;
-    // If the recognizer hasn't finalized the last words yet, give it a moment (finals are more accurate).
-    const endAfter = Math.max(700, this.T.patience) + (turn.interim.trim() ? 600 : 0);
+    // Neural VAD already waited out a pause before ending the segment, so only a short extra wait is needed.
+    // With the browser recognizer alone, give unfinalized words a moment (finals are more accurate).
+    const endAfter = this.serverStt ? 350 : Math.max(700, this.T.patience) + (turn.interim.trim() ? 600 : 0);
     if (silence >= endAfter) this.commitTurn();
   }
 
@@ -476,10 +527,32 @@ export class GDEngine {
     const turn = this.turn;
     if (!turn) return;
     this.turn = null;
-    let text = [...turn.finals, turn.interim].join(" ").replace(/\s+/g, " ").trim();
-    this.set({ studentInterim: "", studentSpeaking: false });
+    const live = [...turn.finals, turn.interim].join(" ").replace(/\s+/g, " ").trim();
     // We're keeping an unfinalized result: start a fresh recognition session so it can't be re-sent.
     if (turn.interim.trim()) this.stt?.restart?.();
+    if (turn.pending.length) {
+      // Wait for the server transcripts (more accurate than live captions); the turn keeps the floor meanwhile.
+      this.pendingCommits++;
+      this.set({ studentInterim: live || "…", studentSpeaking: false });
+      Promise.all(turn.pending)
+        .then((parts) => {
+          const text = parts.join(" ").replace(/\s+/g, " ").trim();
+          this.lastCommitServer = !!text;
+          this.finishCommit(turn, text || live);
+        })
+        .finally(() => {
+          this.pendingCommits--;
+          if (!this.turn && this.pendingCommits === 0) this.set({ studentInterim: "" });
+        });
+      return;
+    }
+    this.set({ studentInterim: "", studentSpeaking: false });
+    this.lastCommitServer = false;
+    this.finishCommit(turn, live);
+  }
+
+  private finishCommit(turn: StudentTurn, raw: string) {
+    let text = raw;
     // Safety net: drop words the recognizer re-sent from the previous line.
     const prev = [...this.s.utterances].reverse().find((u) => u.speaker === "you" && !u.typed);
     if (text && prev && this.now() - prev.end < 20_000) {
@@ -646,6 +719,7 @@ export class GDEngine {
     this.currentStart = start;
     this.bargedIn = false;
     this.mic?.setSensitivity({ thresholdMul: 2.2, minSpeechMs: 350 });
+    this.listener?.setSensitivity({ positiveThreshold: 0.8, minSpeechMs: 400 }); // echo guard while an AI talks
     const handle = this.bank!.speak(speaker, text, (c) => {
       if (this.current?.id === id) this.set({ live: { id, speaker, text, shown: c } });
     });
@@ -655,6 +729,7 @@ export class GDEngine {
     const r = await handle.done;
     this.current = null;
     this.mic?.setSensitivity({ thresholdMul: 1, minSpeechMs: 250 });
+    this.listener?.setSensitivity({ positiveThreshold: 0.5, minSpeechMs: 250 });
     this.set({ live: null });
     if (r.failed) this.event({ type: "tts_error", by: speaker });
     const spoken = r.spokenText.trim();
@@ -998,6 +1073,7 @@ export class GDEngine {
       this.discussionEnd = this.now();
     }
     this.stt?.stop();
+    this.listener?.destroy();
     this.mic?.stop();
     this.saveAndEnd(false);
   }
@@ -1032,6 +1108,15 @@ export class GDEngine {
     if (sayThanks && !this.stopped) await within(this.say("mod", moderatorLines(this.cfg.language).thanks).then(() => true), 12_000, false);
     this.current?.handle.stop();
     this.commitTurn();
+    // Let in-flight server transcripts land in the transcript before saving (bounded).
+    await within(
+      (async () => {
+        while (this.pendingCommits > 0) await sleep(100);
+        return true;
+      })(),
+      8000,
+      false,
+    );
     if (!this.discussionEnd) {
       this.pauseClock();
       this.discussionEnd = this.now();
@@ -1039,6 +1124,7 @@ export class GDEngine {
     this.setPhase("ended");
     this.stt?.stop();
     const blob = await within(this.recording?.stop(), 3000, null);
+    this.listener?.destroy();
     this.mic?.stop();
     const hasAudio = blob ? await within(saveAudio(this.sessionId, blob).then(() => true), 4000, false) : false;
     this.saveAndEnd(hasAudio);
