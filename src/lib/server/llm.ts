@@ -190,7 +190,9 @@ export async function* streamText(req: LlmRequest): AsyncGenerator<string> {
           },
           body: JSON.stringify({
             model,
-            max_tokens: req.maxTokens,
+            // Gemini 3 counts its thinking against max_tokens (3.5 Flash on "low" used ~570 of 600 and cut the
+            // reply mid-sentence), so leave room for it; the visible length is set by the prompt.
+            max_tokens: !viaSarvam && /^gemini-3/.test(model) ? req.maxTokens + 4096 : req.maxTokens,
             temperature: req.temperature ?? 0.9,
             stream: true,
             ...(req.json ? { response_format: { type: "json_object" } } : {}),

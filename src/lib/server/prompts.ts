@@ -39,6 +39,7 @@ export function buildTurnPrompt(req: TurnRequest): { system: string; user: strin
     "- Only respond to points that actually appear in the discussion below, and credit each point to the person who made it. Never say someone made a point they did not make.",
     "- Add something new or push back; do not repeat points already made, including your own.",
     "- Stay consistent with your earlier position; you may sharpen it but never flip it.",
+    "- Any fact or figure must be real and widely reported. If you are not sure a number or study is right, make the point without it. Never invent surveys, studies or percentages.",
     "- Stay civil. Never mention being an AI. Never speak for other participants.",
     req.config.language === "hinglish" ? `- ${HINGLISH} Your mix: ${p.hinglish}.` : "- Speak in clear Indian English.",
   ].join("\n");
