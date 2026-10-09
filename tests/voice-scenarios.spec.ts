@@ -247,6 +247,18 @@ test.describe("voice input scenarios (e2e hook, mock AI)", () => {
     await aiKeepsTalking(page);
   });
 
+  test("e2) saying the same thing again a few seconds later is kept (not mistaken for a re-sent result)", async ({ page }) => {
+    await voiceRoom(page);
+    await waitForPhase(page, /discussion/i);
+    await speakDuring(page, AI);
+    await speechEnd(page, "I agree with that.");
+    await expect(lines(page, "you")).toHaveCount(1);
+    await speakDuring(page, AI, undefined, { fresh: true });
+    await speechEnd(page, "I agree with that.");
+    await expect(lines(page, "you")).toHaveCount(2);
+    await aiKeepsTalking(page);
+  });
+
   test("f) a segment with no words releases the floor", async ({ page }) => {
     await voiceRoom(page);
     await waitForPhase(page, /discussion/i);

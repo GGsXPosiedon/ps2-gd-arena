@@ -38,6 +38,7 @@ test("a real session: AI lines, cloud voices, transcribed speech and an LLM repo
   });
 
   await noHmr(page);
+  await page.addInitScript(() => localStorage.setItem("gd-debug", "1")); // voice pipeline logs in production builds too
   await page.goto("/");
   await page.getByTestId("topic-option").first().click();
   await pickPanel(page, ["arjun", "priya", "meera"]);

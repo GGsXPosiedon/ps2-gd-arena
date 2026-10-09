@@ -711,7 +711,7 @@ export class GDEngine {
           if (this.committing === turn) this.committing = null;
           const text = parts.join(" ").replace(/\s+/g, " ").trim();
           if (text) this.lastServerCommit = this.now();
-          this.finishCommit(turn, text || liveOf(turn));
+          this.finishCommit(turn, text || liveOf(turn), !!text);
         })
         .catch((e) => console.error("[engine] commit failed", e));
       this.commits.add(done);
@@ -754,16 +754,17 @@ export class GDEngine {
     return false;
   }
 
-  private finishCommit(turn: StudentTurn, raw: string) {
+  private finishCommit(turn: StudentTurn, raw: string, fromServer = false) {
     let text = raw;
     if (text && this.isEcho(text, turn)) {
       vlog("dropped as echo:", JSON.stringify(text));
       text = "";
       if (turn.cutAi) this.noteEchoCut();
     }
-    // Safety net: drop words the recognizer re-sent from the previous line.
+    // Safety net: drop words the browser recognizer re-sent from the previous line. (Server transcripts are of
+    // distinct audio, so a repeat there is the student really saying it again, e.g. "I agree" twice.)
     const prev = [...this.s.utterances].reverse().find((u) => u.speaker === "you" && !u.typed);
-    if (text && prev && this.now() - prev.end < 20_000) {
+    if (text && !fromServer && prev && this.now() - prev.end < 20_000) {
       const a = normText(prev.text);
       const b = normText(text);
       if (a === b || a.startsWith(b)) text = "";
