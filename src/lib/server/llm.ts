@@ -31,7 +31,11 @@ export function getProvider(): Provider {
       // Measured on the free tier (Oct 2026): 3.5 Flash Lite answers in ~1–1.6 s; 3.8 Flash often took 4–20 s or timed out.
       fast: fastOverride || "gemini-3.5-flash-lite",
       smart: smartOverride || "gemini-3.5-flash", // 3.6 Flash returned 503 "high demand" repeatedly
-      fallbacks: { fast: ["gemini-3.1-flash-lite"], smart: ["gemini-3.6-flash", "gemini-3.5-flash-lite"] },
+      fallbacks: {
+        // 3.1 Flash Lite measured 8–10 s to first token; keep it as the last resort.
+        fast: ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite"],
+        smart: ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"],
+      },
     };
   }
   if ((forced === "anthropic" || !forced) && env.ANTHROPIC_API_KEY) {
@@ -74,6 +78,57 @@ export interface LlmRequest {
 }
 
 /** Streams text deltas. Throws on HTTP/network errors. Not for the mock provider. */
+// Models that recently failed (quota used up, overloaded, too slow) are skipped for a while so a session
+// doesn't pay a failed round-trip on every turn.
+const downUntil = new Map<string, number>();
+function markDown(model: string, ms: number) {
+  downUntil.set(model, Date.now() + ms);
+}
+function isDown(model: string) {
+  return (downUntil.get(model) ?? 0) > Date.now();
+}
+
+/** The models to try for a request, healthy ones first. */
+export function modelChain(model: LlmRequest["model"]): string[] {
+  const p = getProvider();
+  const all = [model === "fast" ? p.fast : p.smart, ...(p.fallbacks?.[model] ?? [])];
+  const healthy = all.filter((m) => !isDown(m));
+  return healthy.length ? healthy : all;
+}
+
+/**
+ * Streams from the first healthy model; if it hasn't produced a token within `hedgeMs`, starts the next model
+ * in parallel and keeps whichever answers first (the other is abandoned).
+ */
+export async function* streamTextHedged(req: LlmRequest, hedgeMs = 3000): AsyncGenerator<string> {
+  const chain = modelChain(req.model);
+  if (chain.length < 2 || req.modelId) {
+    yield* streamText(req);
+    return;
+  }
+  type First = { from: "a" | "b"; r?: IteratorResult<string>; error?: unknown };
+  const a = streamText({ ...req, modelId: chain[0] });
+  const firstA: Promise<First> = a.next().then((r) => ({ from: "a" as const, r }), (error) => ({ from: "a" as const, error }));
+  const slow = new Promise<"slow">((res) => setTimeout(() => res("slow"), hedgeMs));
+  const early = await Promise.race([firstA, slow]);
+  if (early !== "slow" && !early.error) {
+    if (!early.r!.done) yield early.r!.value;
+    yield* a;
+    return;
+  }
+  if (early === "slow") markDown(chain[0], 60_000); // slow right now: prefer the next model for a minute
+  const b = streamText({ ...req, modelId: chain[1] });
+  const firstB: Promise<First> = b.next().then((r) => ({ from: "b" as const, r }), (error) => ({ from: "b" as const, error }));
+  const candidates = early === "slow" ? [firstA, firstB] : [firstB];
+  let winner = await Promise.race(candidates);
+  if (winner.error && candidates.length === 2) winner = await (winner.from === "a" ? firstB : firstA);
+  if (winner.error) throw winner.error;
+  const [gen, loser] = winner.from === "a" ? [a, b] : [b, a];
+  loser.return(undefined).catch(() => {});
+  if (!winner.r!.done) yield winner.r!.value;
+  yield* gen;
+}
+
 export async function* streamText(req: LlmRequest): AsyncGenerator<string> {
   const p = getProvider();
   if (p.name === "mock") throw new Error("streamText called with mock provider");
@@ -127,10 +182,11 @@ export async function* streamText(req: LlmRequest): AsyncGenerator<string> {
       yield* streamText({ ...req, reasoning: undefined });
       return;
     }
-    // Overloaded or rate-limited: move to the next model in the chain.
+    // Overloaded or rate-limited: remember it and move to the next model in the chain.
     if (res.status === 429 || res.status === 503 || res.status === 500) {
+      markDown(model, res.status === 429 && /quota/i.test(body) ? 60 * 60_000 : 60_000);
       const chain = [req.model === "fast" ? p.fast : p.smart, ...(p.fallbacks?.[req.model] ?? [])];
-      const next = chain[chain.indexOf(model) + 1];
+      const next = chain.slice(chain.indexOf(model) + 1).find((m) => !isDown(m));
       if (next) {
         console.warn(`[llm] ${model} returned ${res.status}; falling back to ${next}`);
         yield* streamText({ ...req, modelId: next });

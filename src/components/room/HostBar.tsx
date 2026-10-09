@@ -49,17 +49,14 @@ export function HostBar({ config, state, lobby }: { config: RoomConfig; state: E
 
   return (
     <header data-testid="host-bar" className="relative shrink-0 border-b border-line bg-canvas">
-      <div className="flex items-center gap-4 px-5 py-3 sm:px-8">
-        <Avatar speaker="mod" size={40} speaking={!!modLive} />
+      <div className="flex items-center gap-3 px-4 py-2.5 sm:gap-4 sm:px-6">
+        <Avatar speaker="mod" size={34} speaking={!!modLive} />
         <div className="min-w-0 flex-1">
-          <p className="hidden font-mono text-[11px] tracking-wide text-fg-3 uppercase sm:block">
-            Moderator <span className="text-line-2">·</span> Group discussion
-          </p>
           {/* Two lines on phones so the whole motion stays readable; one line with an ellipsis on wider screens. */}
-          <h1 className="font-display line-clamp-2 text-[20px] leading-tight text-balance text-fg sm:line-clamp-1 sm:text-[26px]" title={config.topic}>
+          <h1 className="font-display line-clamp-2 text-[18px] leading-tight text-balance text-fg sm:line-clamp-1 sm:text-[21px]" title={config.topic}>
             {config.topic}
           </h1>
-          <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug sm:line-clamp-1" aria-live="polite">
+          <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-snug sm:line-clamp-1" aria-live="polite">
             {modLive ? (
               <>
                 <span className="text-fg">{modLive.text.slice(0, modLive.shown)}</span>
@@ -70,21 +67,22 @@ export function HostBar({ config, state, lobby }: { config: RoomConfig; state: E
             )}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-4 sm:gap-6">
+        <div className="flex shrink-0 items-center gap-4 sm:gap-5">
           <div className="hidden text-right sm:block">
-            <div className="font-mono text-[11px] tracking-wide text-fg-3 uppercase">Phase</div>
-            <div data-testid="phase" className="font-display text-xl leading-tight text-fg italic">
+            <div className="font-mono text-[10.5px] tracking-wider text-fg-3 uppercase">Phase</div>
+            <div data-testid="phase" className="text-[14px] leading-tight font-medium text-fg">
               {lobby ? "Not Started" : PHASE_LABEL[state.phase]}
             </div>
           </div>
+          <span className="hidden h-7 w-px bg-line sm:block" aria-hidden="true" />
           <div className="text-right">
-            <div className="hidden font-mono text-[11px] tracking-wide text-fg-3 uppercase sm:block">
+            <div className="hidden font-mono text-[10.5px] tracking-wider text-fg-3 uppercase sm:block">
               {state.phase === "discussion" ? "Time left" : "Time"}
             </div>
             <div
               data-testid="timer"
               aria-live="off"
-              className={`font-mono text-xl leading-tight tabular-nums sm:text-2xl ${lowTime ? "text-danger" : "text-fg"}`}
+              className={`font-mono text-lg leading-tight tabular-nums sm:text-xl ${lowTime ? "text-danger" : "text-fg"}`}
             >
               {timer}
             </div>

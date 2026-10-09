@@ -2,11 +2,11 @@
 
 import { forwardRef, useLayoutEffect, useRef, useState } from "react";
 import { AiTag, Avatar } from "@/components/Avatar";
-import { Badge, SectionTitle, focusRing, focusWithinRing } from "@/components/ui";
+import { Badge, focusRing, focusWithinRing } from "@/components/ui";
 import type { EngineState } from "@/lib/engine";
 import { speakerName } from "@/lib/personas";
 import type { RoomConfig, Utterance } from "@/lib/types";
-import { fmtClock } from "./format";
+import { fmtClock, nameColor } from "./format";
 import { SendIcon, StopwatchIcon } from "./icons";
 
 function Tags({ u, studentName }: { u: Utterance; studentName: string }) {
@@ -24,9 +24,11 @@ function Tags({ u, studentName }: { u: Utterance; studentName: string }) {
 function Header({ speaker, studentName, start }: { speaker: Utterance["speaker"]; studentName: string; start?: number }) {
   return (
     <div className="flex items-baseline gap-1.5">
-      <span className="truncate text-[13px] font-medium text-fg">{speakerName(speaker, studentName)}</span>
+      <span className="truncate text-[13.5px] font-medium" style={{ color: nameColor(speaker) }}>
+        {speakerName(speaker, studentName)}
+      </span>
       {speaker !== "you" && <AiTag />}
-      <span className="ml-auto shrink-0 font-mono text-[11px] text-fg-3 tabular-nums">{start === undefined ? "Now" : fmtClock(start)}</span>
+      <span className="ml-1 shrink-0 font-mono text-[10.5px] text-fg-3 tabular-nums">{start === undefined ? "Now" : fmtClock(start)}</span>
     </div>
   );
 }
@@ -84,9 +86,15 @@ export const TranscriptPanel = forwardRef<
 
   return (
     <aside className={`flex min-h-0 flex-col bg-canvas ${className}`} aria-label="Transcript">
-      <header className="flex shrink-0 items-end justify-between border-b border-line px-5 pt-4 pb-3">
-        <SectionTitle eyebrow="Live">Transcript</SectionTitle>
-        {utterances.length > 0 && <span className="pb-1 font-mono text-[11px] text-fg-3 tabular-nums">{utterances.length} lines</span>}
+      <header className="flex shrink-0 items-end justify-between border-b border-line px-4 pt-3.5 pb-3">
+        <div>
+          <div className="flex items-center gap-1.5 font-mono text-[10.5px] tracking-wider text-fg-3 uppercase">
+            <span className="size-1.5 rounded-full bg-ok" aria-hidden="true" />
+            Live
+          </div>
+          <h2 className="font-display text-xl leading-tight text-fg">Transcript</h2>
+        </div>
+        {utterances.length > 0 && <span className="pb-0.5 font-mono text-[10.5px] text-fg-3 tabular-nums">{utterances.length} lines</span>}
       </header>
 
       <div
@@ -109,9 +117,9 @@ export const TranscriptPanel = forwardRef<
               key={u.id}
               data-testid="transcript-line"
               data-speaker={u.speaker}
-              className={`flex gap-3 px-4 hover:bg-surface-2 ${grouped ? "py-0.5" : "mt-2 pt-1.5 pb-0.5"}`}
+              className={`flex gap-3 px-4 hover:bg-surface-2 ${grouped ? "py-0.5" : "mt-3 pt-1 pb-0.5"}`}
             >
-              <div className="w-7 shrink-0">{!grouped && <Avatar speaker={u.speaker} studentName={config.studentName} size={28} />}</div>
+              <div className="w-9 shrink-0">{!grouped && <Avatar speaker={u.speaker} studentName={config.studentName} size={36} />}</div>
               <div className="min-w-0 flex-1">
                 {!grouped && <Header speaker={u.speaker} studentName={config.studentName} start={u.start} />}
                 <p className="text-[13.5px] leading-relaxed break-words text-fg-2">
@@ -128,9 +136,9 @@ export const TranscriptPanel = forwardRef<
         )}
 
         {live && live.speaker !== "mod" && (
-          <div className="mt-2 flex gap-3 px-4 pt-1.5" data-testid="transcript-live" data-speaker={live.speaker}>
-            <div className="w-7 shrink-0">
-              <Avatar speaker={live.speaker} studentName={config.studentName} size={28} speaking />
+          <div className="mt-3 flex gap-3 px-4 pt-1" data-testid="transcript-live" data-speaker={live.speaker}>
+            <div className="w-9 shrink-0">
+              <Avatar speaker={live.speaker} studentName={config.studentName} size={36} speaking />
             </div>
             <div className="min-w-0 flex-1">
               <Header speaker={live.speaker} studentName={config.studentName} />
@@ -143,9 +151,9 @@ export const TranscriptPanel = forwardRef<
         )}
 
         {studentInterim && (
-          <div className="mt-2 flex gap-3 px-4 pt-1.5" data-testid="transcript-interim">
-            <div className="w-7 shrink-0">
-              <Avatar speaker="you" studentName={config.studentName} size={28} speaking={state.studentSpeaking} />
+          <div className="mt-3 flex gap-3 px-4 pt-1" data-testid="transcript-interim">
+            <div className="w-9 shrink-0">
+              <Avatar speaker="you" studentName={config.studentName} size={36} speaking={state.studentSpeaking} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 text-[13px] font-medium text-fg">
@@ -166,8 +174,8 @@ export const TranscriptPanel = forwardRef<
           </p>
         )}
         <form
-          className={`flex items-center gap-1 rounded-md border bg-surface pr-1 transition-colors focus-within:border-fg-3 ${focusWithinRing} ${
-            highlight ? "border-fg" : "border-line-2"
+          className={`flex items-center gap-1 rounded-xl border bg-surface-2 pr-1.5 transition-colors focus-within:border-line-2 ${focusWithinRing} ${
+            highlight ? "border-fg" : "border-line"
           }`}
           onSubmit={(e) => {
             e.preventDefault();
@@ -190,13 +198,13 @@ export const TranscriptPanel = forwardRef<
             autoComplete="off"
             enterKeyHint="send"
             placeholder={canSend ? "Type a point and press Enter…" : state.paused ? "Paused…" : "Start the discussion to type…"}
-            className="h-9 min-w-0 flex-1 bg-transparent px-3 text-[13.5px] text-fg outline-none placeholder:text-fg-3 disabled:cursor-not-allowed"
+            className="h-11 min-w-0 flex-1 bg-transparent px-3.5 text-[14px] text-fg outline-none placeholder:text-fg-3 disabled:cursor-not-allowed"
           />
           <button
             type="submit"
             data-testid="composer-send"
             disabled={!canSend || !draft.trim()}
-            className={`grid size-7 place-items-center rounded text-fg-2 transition-colors hover:bg-surface-3 hover:text-fg disabled:opacity-40 ${focusRing}`}
+            className={`grid size-8 place-items-center rounded-lg text-fg-2 transition-colors hover:bg-surface-3 hover:text-fg disabled:opacity-40 ${focusRing}`}
             aria-label="Send point"
           >
             <SendIcon className="size-4" />

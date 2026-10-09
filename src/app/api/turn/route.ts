@@ -1,6 +1,6 @@
 import { PERSONAS } from "@/lib/personas";
 import { mockTurn } from "@/lib/server/mock";
-import { getProvider, streamText, wantsMock } from "@/lib/server/llm";
+import { getProvider, streamTextHedged, wantsMock } from "@/lib/server/llm";
 import { buildTurnPrompt, cleanLine } from "@/lib/server/prompts";
 import { guard } from "@/lib/server/guard";
 import type { TurnRequest } from "@/lib/types";
@@ -47,7 +47,8 @@ export async function POST(request: Request) {
   const name = PERSONAS[req.speaker].name;
 
   // Pull the first chunk before responding so provider errors surface as HTTP errors (client retries).
-  const gen = streamText({ system, user, model: "fast", maxTokens, temperature: 0.95, timeoutMs: 12000, reasoning: "low" });
+  // Hedged: if the first model is slow to start (free-tier congestion), a second one races it.
+  const gen = streamTextHedged({ system, user, model: "fast", maxTokens, temperature: 0.95, timeoutMs: 12000, reasoning: "low" });
   let first: IteratorResult<string>;
   try {
     first = await gen.next();

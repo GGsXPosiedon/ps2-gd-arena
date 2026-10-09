@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AiTag, Avatar } from "@/components/Avatar";
-import { TableFigure } from "@/components/TableFigure";
 import { Button, IconButton, Kbd, Spinner, focusRing } from "@/components/ui";
 import type { EngineState } from "@/lib/engine";
 import { PERSONAS, speakerName } from "@/lib/personas";
 import type { RoomConfig, SpeakerId } from "@/lib/types";
+import { nameColor } from "./format";
 import { ChatIcon, HandIcon, KeyboardIcon, MicIcon, MicOffIcon, PhoneDownIcon } from "./icons";
+import { Tile } from "./Tile";
 
 export interface StageProps {
   config: RoomConfig;
@@ -41,6 +42,14 @@ export function Stage(p: StageProps) {
   const typed = state.inputMode === "typed";
   const turn = yourTurn(state);
   const aiSpeaking = state.live && state.live.speaker !== "mod" ? state.live.speaker : null;
+  // The moderator is the host bar above, not a tile.
+  const seats: SpeakerId[] = [...config.personas, "you"];
+  const wide = seats.length > 4; // 3×2 instead of 2×2 on desktop
+  // 3×2 on a 6-track grid (each tile spans 2) so a short second row can be centred, like Discord.
+  const cols = wide ? "lg:grid-cols-6" : "lg:grid-cols-2";
+  const centreFrom = wide && seats.length === 5 ? 3 : -1; // index of the first tile in the 2-tile second row
+  // Desktop grid keeps 16:10 tiles and scales to fit the stage in both directions (cqh = stage height).
+  const ratio = wide ? (3 * 16) / (2 * 10) : (2 * 16) / (2 * 10);
 
   return (
     <section
@@ -52,23 +61,32 @@ export function Stage(p: StageProps) {
         {p.mobileTranscript ? (
           <div className="flex h-full flex-col">{p.mobileTranscript}</div>
         ) : (
-          // The table is the centrepiece: who is speaking, who is about to, who got cut off, your raised hand.
-          // The moderator is the host bar above, not a seat.
-          <div className="flex items-center justify-center px-4 pt-3 pb-1 sm:h-full sm:min-h-[260px] sm:px-8">
-            <TableFigure
-              personas={config.personas}
-              studentName={config.studentName}
-              showModerator={false}
-              live={{
-                speaking: aiSpeaking,
-                thinking: state.thinking,
-                failed: state.failed,
-                cutOff: p.cutOff,
-                studentSpeaking: state.studentSpeaking,
-                handRaised: state.handRaised,
-              }}
-              className="animate-rise h-full max-h-[540px] w-full max-w-[620px]"
-            />
+          // Discord-style voice grid: one tile per participant, filling the stage (2×2 or 3×2) on desktop.
+          <div className="flex h-full min-h-0 px-4 pt-4 pb-1 sm:px-6 lg:items-center lg:justify-center lg:[container-type:size]">
+            <div
+              className={`animate-rise mx-auto grid w-full max-w-6xl grid-cols-2 gap-3 lg:grid-rows-2 lg:[aspect-ratio:var(--grid-ratio)] lg:[width:min(100%,calc(var(--grid-ratio)*100cqh))] ${cols}`}
+              style={{ "--grid-ratio": ratio } as React.CSSProperties}
+            >
+              {seats.map((id, i) => (
+                <Tile
+                  key={id}
+                  className={`${wide ? `lg:col-span-2 ${i === centreFrom ? "lg:col-start-2" : ""}` : ""} ${
+                    // phones (2 columns): centre a lone last tile
+                    seats.length % 2 === 1 && i === seats.length - 1 ? "max-lg:col-span-2 max-lg:w-[calc(50%-0.375rem)] max-lg:justify-self-center" : ""
+                  }`}
+                  id={id}
+                  studentName={config.studentName}
+                  speaking={id === "you" ? state.studentSpeaking : aiSpeaking === id}
+                  thinking={state.thinking === id}
+                  failed={state.failed === id}
+                  cutOff={!!p.cutOff[id]}
+                  muted={id === "you" && state.muted}
+                  typed={id === "you" && typed}
+                  handRaised={id === "you" && state.handRaised}
+                  highlight={id === "you" && !!turn}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -81,7 +99,13 @@ export function Stage(p: StageProps) {
       )}
 
       {!lobby && (
-        <div className="flex shrink-0 items-start justify-center gap-3 px-4 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:gap-5">
+        <div className="flex shrink-0 justify-center px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {/* Discord-style floating control pill. Labels live in tooltips (title) and aria-labels. */}
+          <div
+            role="toolbar"
+            aria-label="Call controls"
+            className="flex items-center gap-1.5 rounded-full border border-line bg-surface p-1.5 shadow-[0_10px_30px_-12px_rgb(0_0_0/0.45)] sm:gap-2 sm:p-2"
+          >
           <Control label={typed ? "Typing" : state.muted ? "Unmute" : "Mic"}>
             <IconButton
               data-testid="mute-toggle"
@@ -130,6 +154,7 @@ export function Stage(p: StageProps) {
               onToggleCaptions={p.onToggleCaptions}
             />
           </Control>
+          <span className="mx-0.5 h-6 w-px bg-line-2" aria-hidden="true" />
           <Control label="End">
             <div className="relative">
               <IconButton
@@ -139,6 +164,7 @@ export function Stage(p: StageProps) {
                 aria-label="End discussion"
                 title="End discussion"
                 tone="danger"
+                style={{ width: 56 }}
                 aria-haspopup="dialog"
                 aria-expanded={p.confirmEnd}
               >
@@ -147,6 +173,7 @@ export function Stage(p: StageProps) {
               {p.confirmEnd && <EndConfirm onCancel={p.onEndCancel} onConfirm={p.onEndConfirm} />}
             </div>
           </Control>
+          </div>
         </div>
       )}
 
@@ -244,19 +271,21 @@ function Captions({ config, state }: { config: RoomConfig; state: EngineState })
   const thinking = !who && state.thinking ? state.thinking : null;
   return (
     <div className="mx-auto w-full max-w-3xl" data-testid="captions" aria-live="polite">
-      <div className="flex min-h-[84px] items-start gap-3 rounded-2xl border border-line bg-surface px-5 py-4">
+      <div className="flex min-h-[76px] items-start gap-3 rounded-2xl border border-line bg-surface px-4 py-3 sm:px-5">
         {who ? (
           <>
             <Avatar speaker={who} studentName={config.studentName} size={36} speaking />
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-1.5">
-                <span className="text-[13px] font-medium text-fg">{speakerName(who, config.studentName)}</span>
+                <span className="text-[13px] font-medium" style={{ color: nameColor(who) }}>
+                  {speakerName(who, config.studentName)}
+                </span>
                 {who !== "you" && <AiTag />}
                 {who !== "you" && who !== "mod" && (
                   <span className="font-mono text-[11px] tracking-wide text-fg-3 uppercase">{PERSONAS[who].archetype}</span>
                 )}
               </div>
-              <p className="mt-1 text-lg leading-snug text-balance sm:text-xl">
+              <p className="mt-0.5 text-base leading-snug text-pretty sm:text-lg">
                 {student ? (
                   <span className="text-fg">{student}</span>
                 ) : (
@@ -269,7 +298,7 @@ function Captions({ config, state }: { config: RoomConfig; state: EngineState })
             </div>
           </>
         ) : (
-          <div className="flex min-h-[52px] items-center gap-3 text-[15px] text-fg-3">
+          <div className="flex min-h-[48px] items-center gap-3 text-[15px] text-fg-3">
             {thinking ? (
               <>
                 <Avatar speaker={thinking} studentName={config.studentName} size={28} />
@@ -285,14 +314,11 @@ function Captions({ config, state }: { config: RoomConfig; state: EngineState })
   );
 }
 
-/** Round control with a small label under it. */
+/** A control in the pill bar. The label is for tooltips/aria only (Discord-style icon pill). */
 function Control({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex w-16 flex-col items-center gap-1.5">
+    <div className="flex items-center" data-label={label}>
       {children}
-      <span className="text-[11px] whitespace-nowrap text-fg-3" aria-hidden="true">
-        {label}
-      </span>
     </div>
   );
 }

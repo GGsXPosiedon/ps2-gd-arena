@@ -58,6 +58,12 @@ export interface EngineState {
 class Stopped extends Error {}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Voice-pipeline log for diagnosing pickup problems: on in dev, or set localStorage "gd-debug" = "1". */
+const vlog = (...a: unknown[]) => {
+  try {
+    if (process.env.NODE_ENV !== "production" || localStorage.getItem("gd-debug") === "1") console.info("[voice]", ...a);
+  } catch {}
+};
 /** Resolves to `fallback` if `p` hasn't settled within `ms` (never rejects). */
 const within = <T,>(p: Promise<T> | undefined, ms: number, fallback: T): Promise<T> =>
   Promise.race([Promise.resolve(p).catch(() => fallback), sleep(ms).then(() => fallback)]) as Promise<T>;
@@ -76,6 +82,7 @@ interface StudentTurn {
   lastActivity: number;
   interruptedBy?: SpeakerId;
   pending: Promise<string>[]; // server transcripts of this turn's speech segments, in order
+  heard: Set<string>; // ids of AI/moderator lines that were playing while the student spoke (echo check)
 }
 
 export class GDEngine {
@@ -99,6 +106,7 @@ export class GDEngine {
   private audioStartOffset = 0;
   private current: { handle: SpeakHandle; speaker: SpeakerId; id: string; interruptible: boolean } | null = null;
   private bargedIn = false;
+  private lineText = new Map<string, string>(); // id -> full text of AI/moderator lines (echo check)
   // Voice input: neural VAD + per-turn server transcription when available (see setupVoice).
   private listener: Listener | null = null;
   private serverStt = false;
@@ -391,6 +399,7 @@ export class GDEngine {
       },
       { redemptionMs: Math.min(1100, Math.max(500, Math.round(this.T.patience * 0.6))) },
     ).catch(() => null);
+    vlog(this.listener ? "pipeline: neural VAD + server transcription" : "pipeline: basic (loudness VAD + browser recognizer)");
     if (this.listener) {
       this.serverStt = true;
       this.listener.start();
@@ -417,8 +426,22 @@ export class GDEngine {
     if (this.s.muted || this.s.paused || this.s.status !== "running") return;
     const turn = this.turn;
     this.onVoice(false);
-    if (!turn) return; // the speech was treated as echo (an AI was talking)
-    turn.pending.push(transcribe(audio, this.cfg.language).catch(() => ""));
+    if (!turn) {
+      vlog("segment dropped (no turn: treated as echo)", `${(audio.length / 16000).toFixed(1)}s`);
+      return;
+    }
+    vlog("segment →", `${(audio.length / 16000).toFixed(1)}s`, "transcribing");
+    turn.pending.push(
+      transcribe(audio, this.cfg.language)
+        .then((t) => {
+          vlog("transcript:", JSON.stringify(t));
+          return t;
+        })
+        .catch((e) => {
+          vlog("transcription failed:", String(e));
+          return "";
+        }),
+    );
   }
 
   /** Gemini live transcription when configured (better for Hinglish), else the browser recognizer. */
@@ -455,7 +478,15 @@ export class GDEngine {
       // Barge-in: the student talking over an AI stops it (unless the AI is mid-interjection or it's the moderator).
       // In speaker mode the mic hears the AI voices, so only explicit interrupt() can stop them.
       if (this.current?.interruptible && !this.interjecting && !this.cfg.speakerMode) this.bargeIn();
-      if (this.aiSpeaking() && !this.bargedIn && !this.interjecting) return; // likely echo
+      // Speech that starts while an AI persona talks (without a barge-in) is most likely echo in speaker mode.
+      // Speech during the moderator is kept: students often answer as the moderator finishes ("who'd like to
+      // begin?"). Echo of the moderator is filtered out after transcription instead (see isEcho).
+      const overModerator = this.current?.speaker === "mod";
+      if (this.aiSpeaking() && !overModerator && !this.bargedIn && !this.interjecting) {
+        vlog("speech start ignored (AI talking, no barge-in)");
+        return;
+      }
+      vlog("speech start", overModerator ? "(over moderator)" : "");
       this.beginTurn();
       this.turn!.lastActivity = this.now();
       this.set({ studentSpeaking: true });
@@ -504,7 +535,8 @@ export class GDEngine {
 
   private beginTurn() {
     if (this.turn) return;
-    this.turn = { start: Math.max(0, this.now() - 250), finals: [], interim: "", lastActivity: this.now(), pending: [] };
+    this.turn = { start: Math.max(0, this.now() - 250), finals: [], interim: "", lastActivity: this.now(), pending: [], heard: new Set() };
+    if (this.current) this.turn.heard.add(this.current.id);
     this.spec = null;
   }
 
@@ -551,8 +583,36 @@ export class GDEngine {
     this.finishCommit(turn, live);
   }
 
+  /**
+   * Echo = the mic picked up the speakers. Only possible if an AI/moderator line was actually playing while the
+   * student spoke, and only if the transcript repeats a run of that line's words (word trigrams), not just shares
+   * vocabulary (in a GD people naturally reuse each other's words).
+   */
+  private isEcho(text: string, turn: StudentTurn): boolean {
+    if (!turn.heard.size) return false;
+    const words = normText(text).split(" ").filter(Boolean);
+    const grams = (w: string[]) => new Set(w.slice(0, Math.max(0, w.length - 2)).map((_, i) => w.slice(i, i + 3).join(" ")));
+    for (const id of turn.heard) {
+      const line = normText(this.lineText.get(id) ?? "");
+      if (!line) continue;
+      if (words.length < 4) {
+        if (words.length && line.includes(words.join(" "))) return true;
+        continue;
+      }
+      const lineGrams = grams(line.split(" "));
+      const mine = [...grams(words)];
+      const hits = mine.filter((g) => lineGrams.has(g)).length;
+      if (mine.length && hits / mine.length >= 0.6) return true;
+    }
+    return false;
+  }
+
   private finishCommit(turn: StudentTurn, raw: string) {
     let text = raw;
+    if (text && this.isEcho(text, turn)) {
+      vlog("dropped as echo:", JSON.stringify(text));
+      text = "";
+    }
     // Safety net: drop words the recognizer re-sent from the previous line.
     const prev = [...this.s.utterances].reverse().find((u) => u.speaker === "you" && !u.typed);
     if (text && prev && this.now() - prev.end < 20_000) {
@@ -643,6 +703,8 @@ export class GDEngine {
       if (this.current?.id === id) this.set({ live: { id, speaker: ai, text: line, shown: c } });
     });
     this.current = { handle, speaker: ai, id, interruptible: false };
+    this.lineText.set(id, line);
+    this.turn?.heard.add(id);
     this.set({ live: { id, speaker: ai, text: line, shown: 0 } });
     // After 1.5 s: still talking? The AI yields. Otherwise the student ceded the floor.
     await sleep(1500);
@@ -724,6 +786,8 @@ export class GDEngine {
       if (this.current?.id === id) this.set({ live: { id, speaker, text, shown: c } });
     });
     this.current = { handle, speaker, id, interruptible: opts.interruptible ?? speaker !== "mod" };
+    this.lineText.set(id, text);
+    this.turn?.heard.add(id);
     this.set({ live: { id, speaker, text, shown: 0 }, thinking: null });
     opts.onStart?.(id);
     const r = await handle.done;

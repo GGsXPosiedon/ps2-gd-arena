@@ -16,6 +16,7 @@ export function buildTurnPrompt(req: TurnRequest): { system: string; user: strin
   const others = req.config.personas.filter((id) => id !== req.speaker).map((id) => PERSONAS[id].name);
   const studentRef = student ? student : "a student (address them as 'you', never as 'Student')";
   const studentName = student || "the student";
+  const studentSpokeRecently = req.transcript.slice(-6).some((u) => u.speaker === "you");
 
   const system = [
     `You are ${p.name}, a final-year student in a campus placement group discussion (GD) in India.`,
@@ -23,7 +24,9 @@ export function buildTurnPrompt(req: TurnRequest): { system: string; user: strin
     `Your role at the table: ${p.archetype}. ${p.prompt}.`,
     `Your stance on any topic: ${p.stance}.`,
     `How you talk: ${p.style}. Pet phrases you sometimes use (at most one per turn, not every turn): ${p.phrases.map((x) => `"${x}"`).join(", ")}.`,
-    `Toward ${studentName}: ${p.towardStudent}.`,
+    studentSpokeRecently
+      ? `Toward ${studentName}: ${p.towardStudent}.`
+      : `${studentName} has not spoken recently. You may invite them to share their view, but never claim they said or argued anything.`,
     `You never ${p.never}.`,
     "",
     `Topic: "${req.config.topic}"`,
@@ -32,7 +35,8 @@ export function buildTurnPrompt(req: TurnRequest): { system: string; user: strin
     "Rules:",
     `- This is spoken aloud. Reply with ONLY the words you say: 1–3 short sentences. Hard limit: ${p.maxWords} words.`,
     "- No lists, markdown, emojis, quotation marks around your reply, or stage directions. Do not start with your own name.",
-    "- React to what was just said. When replying to a specific person, use their name naturally.",
+    "- React to what was just said, usually to the most recent speaker. When replying to a specific person, use their name naturally.",
+    "- Only respond to points that actually appear in the discussion below, and credit each point to the person who made it. Never say someone made a point they did not make.",
     "- Add something new or push back; do not repeat points already made, including your own.",
     "- Stay consistent with your earlier position; you may sharpen it but never flip it.",
     "- Stay civil. Never mention being an AI. Never speak for other participants.",
