@@ -24,8 +24,8 @@ export function guard(request: Request, route: string, perMinute: number): Respo
   if (process.env.NODE_ENV === "production" && !sameSite(request)) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
-  // Offline mock requests (the e2e suite) cost nothing, so they aren't rate limited.
-  if (request.headers.get("x-floor-mock") === "1") return null;
+  // The e2e suite (offline mock requests) runs against the dev server and isn't rate limited there.
+  if (process.env.NODE_ENV !== "production" && request.headers.get("x-floor-mock") === "1") return null;
   const key = `${route}:${clientIp(request)}`;
   const now = Date.now();
   const recent = (hits.get(key) ?? []).filter((t) => now - t < 60_000);

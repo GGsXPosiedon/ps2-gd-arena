@@ -55,12 +55,13 @@ async function failure(res: Response): Promise<TtsError> {
   return new TtsError(res.status, msg);
 }
 
-async function sarvam(seat: Seat, text: string, language: Language): Promise<{ bytes: Uint8Array; mime: string; provider?: VoiceProvider }> {
+async function sarvam(seat: Seat, text: string, language: Language): Promise<{ bytes: Uint8Array; mime: string }> {
   const v = SARVAM[seat];
   const speaker = overrides("SARVAM_VOICES")[seat] ?? v.speaker;
   const res = await fetch("https://api.sarvam.ai/text-to-speech", {
     method: "POST",
-    signal: AbortSignal.timeout(12_000),
+    // A 160-char chunk takes ~2.5 s; the browser gives up on a chunk after 7 s anyway.
+    signal: AbortSignal.timeout(8000),
     headers: { "content-type": "application/json", "api-subscription-key": process.env.SARVAM_API_KEY! },
     body: JSON.stringify({
       text,
@@ -79,7 +80,7 @@ async function sarvam(seat: Seat, text: string, language: Language): Promise<{ b
   return { bytes: Uint8Array.from(Buffer.from(b64, "base64")), mime: "audio/wav" };
 }
 
-async function google(seat: Seat, text: string): Promise<{ bytes: Uint8Array; mime: string; provider?: VoiceProvider }> {
+async function google(seat: Seat, text: string): Promise<{ bytes: Uint8Array; mime: string }> {
   const name = overrides("GOOGLE_TTS_VOICES")[seat] ?? GOOGLE[seat];
   const res = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(process.env.GOOGLE_TTS_API_KEY!)}`, {
     method: "POST",
@@ -109,30 +110,36 @@ async function geminiWithBackup(seat: Seat, text: string, language: Language): P
   }
 }
 
-// When Sarvam fails (credits used up, quota, outage) we skip it for a while instead of paying its latency on every line.
+// When Sarvam keeps failing (credits used up, bad key, outage) we skip it for a while instead of paying its
+// latency on every line. A single blip doesn't count: switching providers changes every seat's voice.
 let sarvamDownUntil = 0;
+let sarvamFailStreak = 0;
 
 function sarvamOutOfCredits(e: unknown): boolean {
   const status = e instanceof TtsError ? e.status : 0;
-  return status === 402 || status === 403 || status === 429 || /credit|quota|balance|limit/i.test(String((e as Error)?.message));
+  return status === 401 || status === 402 || status === 403 || /credit|balance|insufficient|quota exceeded/i.test(String((e as Error)?.message));
 }
 
-export async function synthesizeSeat(seat: Seat, text: string, language: Language): Promise<{ bytes: Uint8Array; mime: string; provider?: VoiceProvider }> {
+export async function synthesizeSeat(seat: Seat, text: string, language: Language): Promise<{ bytes: Uint8Array; mime: string; provider: VoiceProvider }> {
   const p = voiceProvider();
   if (p === "sarvam") {
     if (Date.now() >= sarvamDownUntil) {
       try {
-        return { ...(await sarvam(seat, text, language)), provider: "sarvam" };
+        const out = await sarvam(seat, text, language);
+        sarvamFailStreak = 0;
+        return { ...out, provider: "sarvam" };
       } catch (e) {
         if (!process.env.GEMINI_API_KEY) throw e;
-        // Out of credits: skip Sarvam for an hour; other failures: retry Sarvam after a minute.
-        sarvamDownUntil = Date.now() + (sarvamOutOfCredits(e) ? 60 * 60_000 : 60_000);
+        // Out of credits: skip Sarvam for an hour; repeated other failures: retry Sarvam after a minute.
+        sarvamFailStreak++;
+        if (sarvamOutOfCredits(e)) sarvamDownUntil = Date.now() + 60 * 60_000;
+        else if (sarvamFailStreak >= 2) sarvamDownUntil = Date.now() + 60_000;
         console.warn(`[voices] Sarvam failed (${(e as Error).message}); falling back to Gemini TTS`);
       }
     }
     if (process.env.GEMINI_API_KEY) return { bytes: await geminiWithBackup(seat, text, language), mime: "audio/wav", provider: "gemini" };
   }
-  if (p === "google") return google(seat, text);
-  if (p === "gemini") return { bytes: await geminiWithBackup(seat, text, language), mime: "audio/wav" };
+  if (p === "google") return { ...(await google(seat, text)), provider: "google" };
+  if (p === "gemini") return { bytes: await geminiWithBackup(seat, text, language), mime: "audio/wav", provider: "gemini" };
   throw new TtsError(404, "Cloud voices are not enabled");
 }

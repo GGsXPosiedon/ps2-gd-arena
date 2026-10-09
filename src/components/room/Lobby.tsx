@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { TableFigure } from "@/components/TableFigure";
-import { Button, Segmented, Spinner } from "@/components/ui";
+import { Button, Segmented, Spinner, focusRing } from "@/components/ui";
 import type { RoomConfig } from "@/lib/types";
 
 /** Pre-join screen: the table, one line on how it works, and a single Start button. */
@@ -82,8 +82,8 @@ export function Lobby({
         {!typed && !speakerMode ? "Use headphones. " : ""}Everyone else at the table is an AI.
       </p>
 
-      <p className="mt-6 text-xs text-fg-3">
-        <Link href="/?step=table" className="rounded underline-offset-4 transition-colors hover:text-fg hover:underline">
+      <p className="mt-4 text-xs text-fg-3">
+        <Link href="/?step=table" className={`inline-block rounded px-2 py-2 underline-offset-4 transition-colors hover:text-fg hover:underline ${focusRing}`}>
           Back to setup
         </Link>
       </p>

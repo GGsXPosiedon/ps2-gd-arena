@@ -182,7 +182,7 @@ export function MicTest({
                 />
               </div>
             </div>
-            <p className="mt-1.5 truncate text-xs text-fg-3" aria-live="polite" title={heard || undefined}>
+            <p className="mt-1.5 line-clamp-2 text-xs text-fg-3" aria-live="polite" title={heard || undefined}>
               {status}
             </p>
           </div>

@@ -72,7 +72,7 @@ export function Input({ className, ...props }: ComponentProps<"input">) {
   return (
     <input
       className={cx(
-        "h-9 w-full min-w-0 rounded-md border border-line-2 bg-surface px-3 text-sm text-fg transition-colors placeholder:text-fg-3 hover:border-fg-3/60",
+        "h-9 w-full min-w-0 rounded-md border border-line-2 bg-surface px-3 text-base text-fg transition-colors placeholder:text-fg-3 sm:text-sm hover:border-fg-3/60",
         focusRing,
         className,
       )}

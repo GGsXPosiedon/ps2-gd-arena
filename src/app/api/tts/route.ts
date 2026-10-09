@@ -1,4 +1,5 @@
 import { guard } from "@/lib/server/guard";
+import { wantsMock } from "@/lib/server/llm";
 import { TtsError } from "@/lib/server/tts";
 import { synthesizeSeat, voiceProvider } from "@/lib/server/voices";
 import type { Language, SpeakerId } from "@/lib/types";
@@ -12,7 +13,8 @@ const SEATS = new Set<SpeakerId>(["mod", "arjun", "priya", "meera", "rohan", "an
 export async function POST(request: Request) {
   const refused = guard(request, "tts", 120); // lines are split into sentence chunks
   if (refused) return refused;
-  if (!voiceProvider()) return Response.json({ error: "Cloud TTS is not enabled" }, { status: 404 });
+  // Mock (test) requests skip the rate limit, so they never reach a paid voice provider.
+  if (!voiceProvider() || wantsMock(request)) return Response.json({ error: "Cloud TTS is not enabled" }, { status: 404 });
 
   let speaker: SpeakerId;
   let text: string;
@@ -30,7 +32,7 @@ export async function POST(request: Request) {
   try {
     const { bytes, mime, provider } = await synthesizeSeat(speaker as Exclude<SpeakerId, "you">, text, language);
     return new Response(new Blob([bytes as BlobPart], { type: mime }), {
-      headers: { "content-type": mime, "cache-control": "no-store", "x-voice-provider": provider ?? "" },
+      headers: { "content-type": mime, "cache-control": "no-store", "x-voice-provider": provider },
     });
   } catch (e) {
     const status = e instanceof TtsError ? e.status : (e as Error)?.name === "TimeoutError" ? 504 : 502;

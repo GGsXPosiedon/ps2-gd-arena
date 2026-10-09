@@ -1,21 +1,29 @@
 // Server-only LLM access. Picks a provider from env; "mock" when no key is configured.
 //
 //   GEMINI_API_KEY      -> Gemini via its OpenAI-compatible endpoint (free tier works)
+//   GEMINI_API_KEY_2    -> optional backup Gemini key (another project), used when the first one is rate-limited
 //   ANTHROPIC_API_KEY   -> Claude
 //   LLM_BASE_URL + LLM_API_KEY -> any OpenAI-compatible API (Groq, OpenRouter, Ollama, OpenAI)
+//   SARVAM_API_KEY      -> Sarvam's chat model is the last resort when every Gemini model fails (LLM_FALLBACK=none
+//                          turns that off); LLM_PROVIDER=sarvam uses it for everything
 //   LLM_PROVIDER=mock   -> force the offline mock (used by e2e tests)
 //   LLM_MODEL_FAST / LLM_MODEL_SMART override the default models.
 
-export type ProviderName = "gemini" | "anthropic" | "openai-compatible" | "mock";
+export type ProviderName = "gemini" | "anthropic" | "openai-compatible" | "sarvam" | "mock";
 
 interface Provider {
   name: ProviderName;
   baseUrl: string;
   apiKey: string;
+  backupKeys?: string[]; // tried for the same model when the main key is rate-limited
   fast: string;
   smart: string;
   fallbacks?: { fast: string[]; smart: string[] }; // tried in order when a model is overloaded or rate-limited
 }
+
+// Sarvam's voice-agent model: ~0.6 s per line, no thinking tokens, 32K context.
+const SARVAM_URL = "https://api.sarvam.ai/v1";
+const SARVAM_MODEL = "sarvam-105b-conversations";
 
 export function getProvider(): Provider {
   const env = process.env;
@@ -23,18 +31,24 @@ export function getProvider(): Provider {
   const fastOverride = env.LLM_MODEL_FAST;
   const smartOverride = env.LLM_MODEL_SMART;
   if (forced === "mock") return { name: "mock", baseUrl: "", apiKey: "", fast: "mock", smart: "mock" };
+  // "sarvam:<model>" chain entries switch to Sarvam for that attempt (see streamText).
+  const sarvam = env.SARVAM_API_KEY && env.LLM_FALLBACK !== "none" ? [`sarvam:${SARVAM_MODEL}`] : [];
+  if (forced === "sarvam" && env.SARVAM_API_KEY) {
+    return { name: "sarvam", baseUrl: SARVAM_URL, apiKey: env.SARVAM_API_KEY, fast: fastOverride || SARVAM_MODEL, smart: smartOverride || SARVAM_MODEL };
+  }
   if ((forced === "gemini" || !forced) && env.GEMINI_API_KEY) {
     return {
       name: "gemini",
       baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
       apiKey: env.GEMINI_API_KEY,
+      backupKeys: env.GEMINI_API_KEY_2 ? [env.GEMINI_API_KEY_2] : [],
       // Measured on the free tier (Oct 2026): 3.5 Flash Lite answers in ~1–1.6 s; 3.8 Flash often took 4–20 s or timed out.
       fast: fastOverride || "gemini-3.5-flash-lite",
       smart: smartOverride || "gemini-3.5-flash", // 3.6 Flash returned 503 "high demand" repeatedly
       fallbacks: {
         // 3.1 Flash Lite measured 8–10 s to first token; keep it as the last resort.
-        fast: ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite"],
-        smart: ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"],
+        fast: ["gemini-3.5-flash", "gemini-3.6-flash", ...sarvam, "gemini-3.1-flash-lite"],
+        smart: ["gemini-3.6-flash", "gemini-3.5-flash-lite", ...sarvam, "gemini-3.1-flash-lite"],
       },
     };
   }
@@ -88,10 +102,15 @@ function isDown(model: string) {
   return (downUntil.get(model) ?? 0) > Date.now();
 }
 
+// A chain entry is a model id, or "model@n" for the same model on backup key n (each key has its own quota).
+function fullChain(p: Provider, model: LlmRequest["model"]): string[] {
+  const models = [model === "fast" ? p.fast : p.smart, ...(p.fallbacks?.[model] ?? [])];
+  return models.flatMap((m) => (m.startsWith("sarvam:") ? [m] : [m, ...(p.backupKeys ?? []).map((_, i) => `${m}@${i + 1}`)]));
+}
+
 /** The models to try for a request, healthy ones first. */
 export function modelChain(model: LlmRequest["model"]): string[] {
-  const p = getProvider();
-  const all = [model === "fast" ? p.fast : p.smart, ...(p.fallbacks?.[model] ?? [])];
+  const all = fullChain(getProvider(), model);
   const healthy = all.filter((m) => !isDown(m));
   return healthy.length ? healthy : all;
 }
@@ -117,7 +136,10 @@ export async function* streamTextHedged(req: LlmRequest, hedgeMs = 3000): AsyncG
     return;
   }
   if (early === "slow") markDown(chain[0], 60_000); // slow right now: prefer the next model for a minute
-  const b = streamText({ ...req, modelId: chain[1] });
+  // Slowness is usually the model, not the key: hedge on a different model when there is one.
+  const base = (m: string) => m.split("@")[0];
+  const second = early === "slow" ? (chain.find((m) => base(m) !== base(chain[0])) ?? chain[1]) : chain[1];
+  const b = streamText({ ...req, modelId: second });
   const firstB: Promise<First> = b.next().then((r) => ({ from: "b" as const, r }), (error) => ({ from: "b" as const, error }));
   const candidates = early === "slow" ? [firstA, firstB] : [firstB];
   let winner = await Promise.race(candidates);
@@ -132,7 +154,12 @@ export async function* streamTextHedged(req: LlmRequest, hedgeMs = 3000): AsyncG
 export async function* streamText(req: LlmRequest): AsyncGenerator<string> {
   const p = getProvider();
   if (p.name === "mock") throw new Error("streamText called with mock provider");
-  const model = req.modelId ?? (req.model === "fast" ? p.fast : p.smart);
+  const slot = req.modelId ?? modelChain(req.model)[0];
+  const viaSarvam = slot.startsWith("sarvam:");
+  const [model, keyIndex] = slot.replace(/^sarvam:/, "").split("@");
+  const apiKey = viaSarvam ? process.env.SARVAM_API_KEY! : keyIndex ? p.backupKeys![Number(keyIndex) - 1] : p.apiKey;
+  const baseUrl = viaSarvam ? SARVAM_URL : p.baseUrl;
+  const sarvamAuth = viaSarvam || p.name === "sarvam";
   const signal = AbortSignal.timeout(req.timeoutMs ?? 20000);
 
   const res =
@@ -142,7 +169,7 @@ export async function* streamText(req: LlmRequest): AsyncGenerator<string> {
           signal,
           headers: {
             "content-type": "application/json",
-            "x-api-key": p.apiKey,
+            "x-api-key": apiKey,
             "anthropic-version": "2023-06-01",
           },
           body: JSON.stringify({
@@ -154,10 +181,13 @@ export async function* streamText(req: LlmRequest): AsyncGenerator<string> {
             stream: true,
           }),
         })
-      : await fetch(`${p.baseUrl}/chat/completions`, {
+      : await fetch(`${baseUrl}/chat/completions`, {
           method: "POST",
           signal,
-          headers: { "content-type": "application/json", authorization: `Bearer ${p.apiKey}` },
+          headers: {
+            "content-type": "application/json",
+            ...(sarvamAuth ? { "api-subscription-key": apiKey } : { authorization: `Bearer ${apiKey}` }),
+          },
           body: JSON.stringify({
             model,
             max_tokens: req.maxTokens,
@@ -182,13 +212,14 @@ export async function* streamText(req: LlmRequest): AsyncGenerator<string> {
       yield* streamText({ ...req, reasoning: undefined });
       return;
     }
-    // Overloaded or rate-limited: remember it and move to the next model in the chain.
-    if (res.status === 429 || res.status === 503 || res.status === 500) {
-      markDown(model, res.status === 429 && /quota/i.test(body) ? 60 * 60_000 : 60_000);
-      const chain = [req.model === "fast" ? p.fast : p.smart, ...(p.fallbacks?.[req.model] ?? [])];
-      const next = chain.slice(chain.indexOf(model) + 1).find((m) => !isDown(m));
+    // Overloaded, rate-limited or unavailable to this key: remember it and move to the next model in the chain.
+    if ([401, 403, 404, 429, 500, 502, 503].includes(res.status)) {
+      const lasting = (res.status === 429 && /quota/i.test(body)) || res.status < 429;
+      markDown(slot, lasting ? 60 * 60_000 : 60_000);
+      const chain = fullChain(p, req.model);
+      const next = chain.slice(chain.indexOf(slot) + 1).find((m) => !isDown(m));
       if (next) {
-        console.warn(`[llm] ${model} returned ${res.status}; falling back to ${next}`);
+        console.warn(`[llm] ${slot} returned ${res.status}; falling back to ${next}`);
         yield* streamText({ ...req, modelId: next });
         return;
       }

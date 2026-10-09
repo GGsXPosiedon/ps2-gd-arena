@@ -86,7 +86,7 @@ export const TranscriptPanel = forwardRef<
 
   return (
     <aside className={`flex min-h-0 flex-col bg-canvas ${className}`} aria-label="Transcript">
-      <header className="flex shrink-0 items-end justify-between border-b border-line px-4 pt-3.5 pb-3">
+      <header className="flex shrink-0 items-end justify-between border-b border-line px-4 pt-3.5 pb-3 [@media(max-height:500px)]:hidden">
         <div>
           <div className="flex items-center gap-1.5 font-mono text-[10.5px] tracking-wider text-fg-3 uppercase">
             <span className="size-1.5 rounded-full bg-ok" aria-hidden="true" />
@@ -150,7 +150,7 @@ export const TranscriptPanel = forwardRef<
           </div>
         )}
 
-        {studentInterim && (
+        {(studentInterim || (state.studentSpeaking && typed === false && !state.muted)) && (
           <div className="mt-3 flex gap-3 px-4 pt-1" data-testid="transcript-interim">
             <div className="w-9 shrink-0">
               <Avatar speaker="you" studentName={config.studentName} size={36} speaking={state.studentSpeaking} />
@@ -161,7 +161,15 @@ export const TranscriptPanel = forwardRef<
                 <span aria-hidden className="size-1.5 rounded-full bg-ok" />
                 <span className="sr-only">(speaking)</span>
               </div>
-              <p className="text-[13.5px] leading-relaxed break-words text-fg-2">{studentInterim}</p>
+              <p className="text-[13.5px] leading-relaxed break-words text-fg-2">
+                {!studentInterim ? (
+                  <span className="text-fg-3">Speaking…</span>
+                ) : studentInterim === "…" ? (
+                  <span className="text-fg-3">Transcribing…</span>
+                ) : (
+                  studentInterim
+                )}
+              </p>
             </div>
           </div>
         )}
@@ -169,7 +177,7 @@ export const TranscriptPanel = forwardRef<
 
       <div className="shrink-0 border-t border-line p-3">
         {typed && (
-          <p id="typing-hint" className="mb-2 text-xs text-fg-3">
+          <p id="typing-hint" className="mb-2 text-xs text-fg-3 [@media(max-height:500px)]:sr-only">
             Typing mode. Press Enter to say your point.
           </p>
         )}
@@ -198,7 +206,7 @@ export const TranscriptPanel = forwardRef<
             autoComplete="off"
             enterKeyHint="send"
             placeholder={canSend ? "Type a point and press Enter…" : state.paused ? "Paused…" : "Start the discussion to type…"}
-            className="h-11 min-w-0 flex-1 bg-transparent px-3.5 text-[14px] text-fg outline-none placeholder:text-fg-3 disabled:cursor-not-allowed"
+            className="h-11 min-w-0 flex-1 bg-transparent px-3.5 text-base text-fg sm:text-[14px] outline-none placeholder:text-fg-3 disabled:cursor-not-allowed"
           />
           <button
             type="submit"

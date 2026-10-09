@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { focusRing } from "./ui";
 
 type Theme = "dark" | "light";
@@ -17,6 +17,10 @@ const current = (): Theme => (document.documentElement.dataset.theme === "light"
 export function ThemeToggle({ className = "" }: { className?: string }) {
   const theme = useSyncExternalStore(subscribe, current, () => "dark" as Theme);
   const next: Theme = theme === "dark" ? "light" : "dark";
+  // The phone's browser bar follows the chosen theme, not only the system one.
+  useEffect(() => {
+    for (const m of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) m.content = theme === "light" ? "#ffffff" : "#000000";
+  }, [theme]);
   return (
     <button
       type="button"

@@ -1,4 +1,5 @@
 import { guard } from "@/lib/server/guard";
+import { wantsMock } from "@/lib/server/llm";
 import { SttError, transcribeWav } from "@/lib/server/stt";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,8 @@ export async function POST(request: Request) {
   const bytes = new Uint8Array(await request.arrayBuffer());
   if (!bytes.length) return Response.json({ error: "Empty audio" }, { status: 400 });
   if (bytes.length > MAX_BYTES) return Response.json({ error: "Audio too long" }, { status: 413 });
+  // Mock (test) requests never reach a paid transcription provider; "" means "heard nothing" (live captions are used).
+  if (wantsMock(request)) return Response.json({ text: "", provider: "mock" });
 
   try {
     const { text, provider } = await transcribeWav(bytes, lang);

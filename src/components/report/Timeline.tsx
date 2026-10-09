@@ -74,7 +74,7 @@ export function Timeline({
               onClick={() => onJump(seg.id)}
               aria-label={`Go to the moderator at ${fmtTime(seg.start)}`}
               title={`Moderator · ${fmtTime(seg.start)}`}
-              className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-fg-3 transition-colors hover:bg-fg focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue"
+              className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-fg-3 transition-colors before:absolute before:-inset-x-1.5 before:inset-y-0 hover:bg-fg focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue"
               style={{ left: pct(seg.start) }}
             />
           ))}
@@ -97,7 +97,7 @@ export function Timeline({
                     onClick={() => onJump(seg.id)}
                     aria-label={`Go to ${name} at ${fmtTime(seg.start)}`}
                     title={fmtTime(seg.start)}
-                    className="absolute inset-y-0 rounded-[2px] opacity-85 transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue"
+                    className="absolute inset-y-0 rounded-[2px] opacity-85 transition-opacity before:absolute before:-inset-x-1 before:-inset-y-2 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue"
                     style={{ left: pct(seg.start), width: `max(3px, ${pct(seg.end - seg.start)})`, background: speakerInk(l.speaker) }}
                   />
                 ))}

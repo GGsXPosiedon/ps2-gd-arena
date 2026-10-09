@@ -39,8 +39,9 @@ export default function RoomPage() {
       if (cancelled) return;
       setBoot({ engine, config, inputMode, autoStarted, key: 0 });
       if (autoStarted) {
+        // Drop ?start=1 right away (a reload must show the pre-join screen, which unlocks audio with its click).
+        window.history.replaceState(null, "", "/room");
         engine.start();
-        router.replace("/room");
       }
     });
     return () => {

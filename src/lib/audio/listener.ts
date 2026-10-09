@@ -4,9 +4,9 @@
 // Assets are served from /vad/ (copied by scripts/copy-vad-assets.mjs).
 
 export interface ListenerEvents {
-  onSpeechStart: () => void;
+  onSpeechStart: () => void; // after `minSpeechMs` of speech, so a cough or a click never counts as talking
   onSpeechEnd: (audio: Float32Array) => void; // 16 kHz mono PCM of the speech segment (with a little pre-roll)
-  onMisfire?: () => void; // speech too short
+  onMisfire?: () => void; // a started segment turned out too short
 }
 
 export interface Listener {
@@ -38,7 +38,22 @@ export async function createListener(
     if (ctx.state === "suspended") await ctx.resume().catch(() => {});
 
     let probability = 0;
-    const positive = opts.positiveThreshold ?? 0.5;
+    let positive = opts.positiveThreshold ?? 0.5;
+    let minSpeech = opts.minSpeechMs ?? 250;
+    // Speech start is reported once the segment has `minSpeech` ms of speech frames (counted the way the library
+    // decides between a segment and a misfire). Counted here rather than with the library's onSpeechRealStart,
+    // which never fires if minSpeech is lowered mid-segment (an AI line ending while the student is already
+    // talking) and would leave the student's turn unopened.
+    let inSegment = false;
+    let real = false;
+    let frames = 0;
+    let frameMs = 32;
+    const reached = () => frames >= Math.floor(minSpeech / frameMs);
+    const reset = () => {
+      inSegment = false;
+      real = false;
+      frames = 0;
+    };
     const vad = await MicVAD.new({
       model: "v5",
       baseAssetPath: ASSETS,
@@ -52,18 +67,39 @@ export async function createListener(
       positiveSpeechThreshold: positive,
       negativeSpeechThreshold: negativeFor(positive),
       redemptionMs: opts.redemptionMs ?? 700,
-      minSpeechMs: opts.minSpeechMs ?? 250,
-      preSpeechPadMs: 300,
+      minSpeechMs: minSpeech,
+      preSpeechPadMs: 400, // soft first syllables sit below the threshold; keep them for transcription
       submitUserSpeechOnPause: false,
       ortConfig: (ort) => {
         ort.env.logLevel = "error";
         ort.env.wasm.numThreads = 1; // no cross-origin isolation needed
       },
-      onSpeechStart: () => events.onSpeechStart(),
-      onSpeechEnd: (audio) => events.onSpeechEnd(audio),
-      onVADMisfire: () => events.onMisfire?.(),
-      onFrameProcessed: (p) => {
+      onSpeechStart: () => {
+        inSegment = true;
+        frames = 1; // the frame that opened the segment (processed just before this callback)
+        real = reached();
+        if (real) events.onSpeechStart();
+      },
+      onSpeechEnd: (audio) => {
+        const wasReal = real;
+        reset();
+        if (!wasReal) events.onSpeechStart(); // only if the threshold changed mid-segment
+        events.onSpeechEnd(audio);
+      },
+      onVADMisfire: () => {
+        const wasReal = real;
+        reset();
+        if (wasReal) events.onMisfire?.();
+      },
+      onFrameProcessed: (p, frame) => {
         probability = p.isSpeech;
+        frameMs = (frame.length / 16000) * 1000;
+        if (!inSegment || real || p.isSpeech < positive) return;
+        frames++;
+        if (reached()) {
+          real = true;
+          events.onSpeechStart();
+        }
       },
     });
 
@@ -75,6 +111,7 @@ export async function createListener(
       },
       pause() {
         probability = 0;
+        reset(); // the library drops an unfinished segment on pause
         void vad.pause().catch(() => {});
       },
       destroy() {
@@ -85,6 +122,8 @@ export async function createListener(
           .finally(() => context.close().catch(() => {}));
       },
       setSensitivity({ positiveThreshold, minSpeechMs }) {
+        if (positiveThreshold !== undefined) positive = positiveThreshold;
+        if (minSpeechMs !== undefined) minSpeech = minSpeechMs;
         vad.setOptions({
           ...(positiveThreshold !== undefined
             ? { positiveSpeechThreshold: positiveThreshold, negativeSpeechThreshold: negativeFor(positiveThreshold) }

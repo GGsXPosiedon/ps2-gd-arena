@@ -28,6 +28,7 @@ No API key? The app still runs end to end in **mock mode**: the AI participants 
    | `TTS_PROVIDER` | `sarvam` |
    | `SARVAM_API_KEY` | your key from https://dashboard.sarvam.ai |
 
+   The Sarvam key also covers speech-to-text, and Sarvam's chat model takes over the AI lines if Gemini is out of quota.
    Without keys the deployment still works in demo mode (scripted AI lines, browser voices).
 3. Deploy. Vercel serves HTTPS, which browsers require for microphone access.
 

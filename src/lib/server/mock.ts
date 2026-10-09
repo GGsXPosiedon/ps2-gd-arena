@@ -186,10 +186,13 @@ export function mockTurn(req: TurnRequest): string {
   if (fixed?.length) candidates = fixed.map((l) => fill(l, req));
   else {
     // all lead + point combinations (plus bare points), in a seed-dependent order
+    // (a student without a name can't be addressed, so skip the leads that name the last speaker)
+    const unnamed = lastOtherSpeaker(req.transcript, req.speaker) === "you" && !req.config.studentName.trim();
+    const leads = unnamed ? pool.leads.filter((l) => !l.includes("{last}")) : pool.leads;
     candidates = [];
     for (const p of pool.points) {
       candidates.push(fill(p, req));
-      for (const l of pool.leads) candidates.push(fill(`${l} ${p}`, req));
+      for (const l of leads) candidates.push(fill(joinLead(l, p), req));
     }
   }
   const fresh = candidates.filter((c) => !said.has(c) && !pointUsed(c, pool, req, said));
@@ -209,11 +212,17 @@ function pointUsed(line: string, pool: Pool, req: TurnRequest, said: Set<string>
   });
 }
 
+/** "At the end of the day, {last}," + "Execution is…" reads "…, execution is…" (keeps "I…" and acronyms). */
+function joinLead(lead: string, point: string): string {
+  if (!lead.endsWith(",") || /^(I\b|I'|[A-Z]{2})/.test(point)) return `${lead} ${point}`;
+  return `${lead} ${point.charAt(0).toLowerCase()}${point.slice(1)}`;
+}
+
 function fill(template: string, req: TurnRequest): string {
   const last = lastOtherSpeaker(req.transcript, req.speaker);
   const student = req.config.studentName.trim() || "you";
   const topic = req.config.topic.replace(/[?.!]+$/, "");
-  const lastName = last === "you" ? student : last ? PERSONAS[last as PersonaId].name : "everyone";
+  const lastName = last === "you" ? (req.config.studentName.trim() || "everyone") : last ? PERSONAS[last as PersonaId].name : "everyone";
   return template
     .replaceAll("{topic}", topic.length > 70 ? "this case" : topic)
     .replaceAll("{last}", lastName)

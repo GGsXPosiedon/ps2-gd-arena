@@ -7,6 +7,7 @@ import { flushSync } from "react-dom";
 import { AsciiField } from "@/components/AsciiField";
 import { AiTag, Avatar } from "@/components/Avatar";
 import { MicTest, type InputChoice } from "@/components/MicTest";
+import { unlockAudio } from "@/lib/audio/tts";
 import { TableFigure } from "@/components/TableFigure";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Badge, Button, Input, Kbd, Segmented, Switch, focusRing, SectionTitle, focusWithinRing } from "@/components/ui";
@@ -80,6 +81,16 @@ function withTransition(apply: () => void) {
   return doc.startViewTransition(() => flushSync(apply)).finished.catch(() => {});
 }
 
+const DRAFT_KEY = "floor:draft";
+function readDraft(): RoomConfig | null {
+  try {
+    const d = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? "null");
+    return d && typeof d.topic === "string" && Array.isArray(d.personas) ? { ...DEFAULT_CONFIG, ...d } : null;
+  } catch {
+    return null;
+  }
+}
+
 function stepFromUrl(): Step {
   return new URLSearchParams(window.location.search).get("step") === "table" ? "table" : "topic";
 }
@@ -116,8 +127,12 @@ export default function SetupPage() {
     Promise.resolve().then(() => {
       if (!alive) return;
       const c = loadConfig();
-      setConfig(c);
+      // A reload keeps the choices made so far (they're only saved for good on Start).
+      const reload = (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined)?.type === "reload";
+      const draft = reload ? readDraft() : null;
+      setConfig(draft ?? c);
       if (hasSavedConfig()) setSaved(c);
+      if (sessionStorage.getItem("floor:inputMode") === "typed") setInputChoice("keyboard");
       const preset = TOPICS.find((t) => t.title === c.topic);
       if (preset) setCategory(preset.category);
       setSessions(listSessions());
@@ -152,6 +167,12 @@ export default function SetupPage() {
   }, [step]);
 
   const update = (patch: Partial<RoomConfig>) => setConfig((c) => ({ ...c, ...patch }));
+
+  useEffect(() => {
+    try {
+      if (config !== DEFAULT_CONFIG) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(config));
+    } catch {}
+  }, [config]);
 
   /** Choose a topic and reveal the panel + settings. `from` is the element that morphs into the header. */
   function chooseTopic(topic: string, topicCategory: string, from?: HTMLElement | null) {
@@ -218,6 +239,7 @@ export default function SetupPage() {
 
   function enter() {
     if (starting) return;
+    unlockAudio(); // inside the tap, before navigating: lets the AI voices play on iOS
     setStarting(true);
     const e2e = new URLSearchParams(window.location.search).get("e2e") === "1";
     saveConfig({ ...config, e2e });
@@ -490,10 +512,115 @@ export default function SetupPage() {
         // ================= step 2: room settings (split like step 1: visual left, action right) =================
         // No transform animation on <main>, the right column or anything wrapping the fixed mobile button.
         <main id="main" className="grid min-h-[calc(100dvh-4rem-1px)] pb-40 lg:h-[calc(100dvh-4rem-1px)] lg:min-h-0 lg:grid-cols-2 lg:pb-0">
-          {/* RIGHT (action). On phones the panel (left half) comes first, so you see who you're up against. */}
+          {/* LEFT (visual): the topic, your live table and the panel picker. First on phones too, so you see who you're up against. */}
+          <aside
+            aria-labelledby="topic-heading"
+            className="flex min-w-0 items-center justify-center border-b border-line bg-surface px-4 py-8 sm:px-8 lg:overflow-y-auto lg:border-r lg:border-b-0 lg:px-10 lg:py-6"
+          >
+            <div className="w-full max-w-xl">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <SectionTitle eyebrow="Topic" id="topic-heading">
+                    <span className="line-clamp-2" style={{ viewTransitionName: "topic" }} title={config.topic}>
+                      {config.topic}
+                    </span>
+                  </SectionTitle>
+                </div>
+                <Button variant="secondary" size="sm" data-testid="topic-change" onClick={back} className="mt-5 shrink-0">
+                  Change
+                </Button>
+              </div>
+              {/* Drill goal picked on a report ("Practise this"); shown again in the room. */}
+              {config.focus && (
+                <p data-testid="setup-focus" className="mt-3 flex w-fit max-w-full items-center gap-1 rounded-full border border-line-2 bg-canvas py-0.5 pr-0.5 pl-3 text-[13px] text-fg-2">
+                  <span className="min-w-0 truncate">
+                    <span className="text-fg">Focus:</span> {config.focus}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Remove focus"
+                    title="Remove focus"
+                    onClick={() => update({ focus: undefined })}
+                    className={`grid size-7 shrink-0 place-items-center rounded-full text-fg-3 transition-colors hover:bg-surface-3 hover:text-fg ${focusRing}`}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                      <path d="M2 2l6 6M8 2 2 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </p>
+              )}
+
+              <TableFigure
+                personas={config.personas}
+                studentName={config.studentName}
+                className="animate-rise mx-auto mt-2 w-full max-w-[18rem] [@media(max-height:880px)]:max-w-[14.5rem]"
+              />
+
+              <section aria-labelledby="panel-heading" className="animate-rise mt-1" style={{ animationDelay: "80ms" }}>
+                <div className="flex items-baseline justify-between gap-4">
+                  <SectionTitle id="panel-heading">Panel</SectionTitle>
+                  <span className="text-[13px] text-fg-3 tabular-nums">{panelCount} of 3–5 picked</span>
+                </div>
+                <ul className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {PERSONA_ORDER.map((id) => {
+                    const p = PERSONAS[id];
+                    const on = config.personas.includes(id);
+                    const locked = (on && panelCount <= MIN_PANEL) || (!on && panelCount >= MAX_PANEL);
+                    return (
+                      <li key={id} className="min-w-0">
+                        <button
+                          type="button"
+                          data-testid={`persona-card-${id}`}
+                          aria-pressed={on}
+                          aria-disabled={locked}
+                          title={locked ? (on ? "At least 3 AI participants: add someone before removing" : "At most 5 AI participants: remove someone first") : undefined}
+                          onClick={() => !locked && togglePersona(id)}
+                          className={`relative flex h-full w-full flex-col gap-1.5 rounded-xl border p-2.5 text-left transition-colors ${focusRing} ${
+                            on ? "border-fg bg-surface-2" : "border-line hover:border-line-2"
+                          } ${locked ? "cursor-not-allowed" : ""}`}
+                        >
+                          <span className="flex min-w-0 items-center gap-2 pr-5">
+                            <Avatar speaker={id} size={30} />
+                            <span className="min-w-0">
+                              <span className="flex items-center text-[13px] leading-tight font-medium text-fg">
+                                <span className="truncate">{p.name}</span>
+                                <AiTag />
+                              </span>
+                              <span className="block truncate text-[11px] leading-snug text-fg-3">{p.archetype}</span>
+                            </span>
+                          </span>
+                          <span className="line-clamp-3 text-[12px] leading-snug text-fg-2">{p.blurb}</span>
+                          <span
+                            aria-hidden="true"
+                            className={`absolute top-2 right-2 grid size-4 place-items-center rounded-full border transition-colors ${
+                              on ? "border-fg bg-fg text-canvas" : "border-line-2"
+                            }`}
+                          >
+                            {on && (
+                              <svg width="9" height="9" viewBox="0 0 10 10">
+                                <path d="M2 5.2 4.1 7.3 8 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="mt-1.5 text-xs text-fg-3" aria-live="polite">
+                  {panelCount <= MIN_PANEL
+                    ? "At least 3 AI participants. Add someone before removing another."
+                    : panelCount >= MAX_PANEL
+                      ? "At most 5 AI participants. Remove someone to add another."
+                      : `${panelCount} AI participants and the moderator. Tap to add or remove.`}
+                </p>
+              </section>
+            </div>
+          </aside>
+          {/* RIGHT (action) */}
           <section
             aria-labelledby="settings-heading"
-            className="flex min-w-0 flex-col px-4 py-8 sm:px-8 lg:order-2 lg:overflow-y-auto lg:overscroll-contain lg:px-12 lg:py-6 xl:px-16"
+            className="flex min-w-0 flex-col px-4 py-8 sm:px-8 lg:overflow-y-auto lg:overscroll-contain lg:px-12 lg:py-6 xl:px-16"
           >
             {/* my-auto centres the column, and still scrolls from the top when it overflows */}
             <div className="mx-auto my-auto w-full max-w-xl">
@@ -639,92 +766,6 @@ export default function SetupPage() {
             </div>
           </section>
 
-          {/* LEFT (visual): the topic, your live table and the panel picker */}
-          <aside
-            aria-labelledby="topic-heading"
-            className="order-first flex min-w-0 items-center justify-center border-b border-line bg-surface px-4 py-8 sm:px-8 lg:order-1 lg:overflow-y-auto lg:border-r lg:border-b-0 lg:px-10 lg:py-6"
-          >
-            <div className="w-full max-w-xl">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <SectionTitle eyebrow="Topic" id="topic-heading">
-                    <span className="line-clamp-2" style={{ viewTransitionName: "topic" }} title={config.topic}>
-                      {config.topic}
-                    </span>
-                  </SectionTitle>
-                </div>
-                <Button variant="secondary" size="sm" data-testid="topic-change" onClick={back} className="mt-5 shrink-0">
-                  Change
-                </Button>
-              </div>
-
-              <TableFigure
-                personas={config.personas}
-                studentName={config.studentName}
-                className="animate-rise mx-auto mt-2 w-full max-w-[18rem] [@media(max-height:880px)]:max-w-[14.5rem]"
-              />
-
-              <section aria-labelledby="panel-heading" className="animate-rise mt-1" style={{ animationDelay: "80ms" }}>
-                <div className="flex items-baseline justify-between gap-4">
-                  <SectionTitle id="panel-heading">Panel</SectionTitle>
-                  <span className="text-[13px] text-fg-3 tabular-nums">{panelCount} of 3–5 picked</span>
-                </div>
-                <ul className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {PERSONA_ORDER.map((id) => {
-                    const p = PERSONAS[id];
-                    const on = config.personas.includes(id);
-                    const locked = (on && panelCount <= MIN_PANEL) || (!on && panelCount >= MAX_PANEL);
-                    return (
-                      <li key={id} className="min-w-0">
-                        <button
-                          type="button"
-                          data-testid={`persona-card-${id}`}
-                          aria-pressed={on}
-                          aria-disabled={locked}
-                          title={locked ? (on ? "At least 3 AI participants: add someone before removing" : "At most 5 AI participants: remove someone first") : undefined}
-                          onClick={() => !locked && togglePersona(id)}
-                          className={`relative flex h-full w-full flex-col gap-1.5 rounded-xl border p-2.5 text-left transition-colors ${focusRing} ${
-                            on ? "border-fg bg-surface-2" : "border-line hover:border-line-2"
-                          } ${locked ? "cursor-not-allowed" : ""}`}
-                        >
-                          <span className="flex min-w-0 items-center gap-2 pr-5">
-                            <Avatar speaker={id} size={30} />
-                            <span className="min-w-0">
-                              <span className="flex items-center text-[13px] leading-tight font-medium text-fg">
-                                <span className="truncate">{p.name}</span>
-                                <AiTag />
-                              </span>
-                              <span className="block truncate text-[11px] leading-snug text-fg-3">{p.archetype}</span>
-                            </span>
-                          </span>
-                          <span className="line-clamp-3 text-[12px] leading-snug text-fg-2">{p.blurb}</span>
-                          <span
-                            aria-hidden="true"
-                            className={`absolute top-2 right-2 grid size-4 place-items-center rounded-full border transition-colors ${
-                              on ? "border-fg bg-fg text-canvas" : "border-line-2"
-                            }`}
-                          >
-                            {on && (
-                              <svg width="9" height="9" viewBox="0 0 10 10">
-                                <path d="M2 5.2 4.1 7.3 8 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                              </svg>
-                            )}
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <p className="mt-1.5 text-xs text-fg-3" aria-live="polite">
-                  {panelCount <= MIN_PANEL
-                    ? "At least 3 AI participants. Add someone before removing another."
-                    : panelCount >= MAX_PANEL
-                      ? "At most 5 AI participants. Remove someone to add another."
-                      : `${panelCount} AI participants and the moderator. Tap to add or remove.`}
-                </p>
-              </section>
-            </div>
-          </aside>
         </main>
       )}
     </div>

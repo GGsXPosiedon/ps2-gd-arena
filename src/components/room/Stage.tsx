@@ -267,7 +267,9 @@ function EndConfirm({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: 
 function Captions({ config, state }: { config: RoomConfig; state: EngineState }) {
   const live = state.live && state.live.speaker !== "mod" ? state.live : null; // moderator lines show in the host bar
   const student = state.studentInterim;
-  const who: SpeakerId | null = student ? "you" : live ? live.speaker : null;
+  // With server transcription the words arrive after you pause; show that you're being heard meanwhile.
+  const speaking = !student && !live && state.studentSpeaking && state.inputMode === "voice" && !state.muted;
+  const who: SpeakerId | null = student || speaking ? "you" : live ? live.speaker : null;
   const thinking = !who && state.thinking ? state.thinking : null;
   return (
     <div className="mx-auto w-full max-w-3xl" data-testid="captions" aria-live="polite">
@@ -286,8 +288,12 @@ function Captions({ config, state }: { config: RoomConfig; state: EngineState })
                 )}
               </div>
               <p className="mt-0.5 text-base leading-snug text-pretty sm:text-lg">
-                {student ? (
+                {student === "…" ? (
+                  <span className="text-fg-3">Transcribing…</span>
+                ) : student ? (
                   <span className="text-fg">{student}</span>
+                ) : speaking ? (
+                  <span className="text-fg-3">Speaking… your words appear when you pause.</span>
                 ) : (
                   <>
                     <span className="text-fg">{live!.text.slice(0, live!.shown)}</span>
@@ -374,6 +380,12 @@ function StatusLine(p: StageProps & { turn: "closing" | "hand" | null }) {
       : "The floor is open. Start speaking to open the discussion.";
   } else if (state.ttsSilent && !config.e2e) {
     message = "Captions only: no voices in this browser.";
+  } else if (config.focus && state.phase !== "closing") {
+    message = (
+      <>
+        <span className="text-fg-2">Your focus:</span> {config.focus}
+      </>
+    );
   }
 
   const color = tone === "ok" ? "text-ok" : tone === "warn" ? "text-warn" : "text-fg-3";

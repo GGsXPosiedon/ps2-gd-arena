@@ -1,6 +1,6 @@
-// Text-to-speech with one voice per seat. Uses Gemini cloud voices when the server enables them
-// (/api/health -> tts: "gemini"), otherwise browser speechSynthesis. Falls back to "silent" timed
-// captions when nothing can speak (and always in e2e mode).
+// Text-to-speech with one voice per seat. Uses cloud voices (/api/tts: Sarvam, Google or Gemini) when the
+// server enables them (/api/health -> tts !== "browser"), otherwise browser speechSynthesis. Falls back to
+// "silent" timed captions when nothing can speak (and always in e2e mode).
 import { MODERATOR, PERSONAS } from "../personas";
 import type { Language, SpeakerId } from "../types";
 
@@ -66,20 +66,109 @@ export async function loadVoices(timeoutMs = 1500): Promise<SpeechSynthesisVoice
   });
 }
 
+// A period after these doesn't end a sentence ("Dr. Rao", "e.g. this", "U.S. firms").
+const ABBREVIATION = /(?:^|[\s.])(?:mr|mrs|ms|dr|prof|sr|jr|st|vs|etc|e\.g|i\.e|approx|rs|govt|dept|inc|ltd|[a-z])\.$/i;
+
+/** Splits at . ! ? or । followed by a space, so "3.5" and "Dr. Rao" stay whole. */
 function splitSentences(text: string): string[] {
-  const parts = text.match(/[^.!?।]+[.!?।]+["')\]]*\s*|[^.!?।]+$/g) ?? [text];
-  return parts.map((p) => p.trim()).filter(Boolean);
+  const out: string[] = [];
+  let start = 0;
+  for (const m of text.matchAll(/[.!?।]+["'”’)\]]*(?=\s|$)/g)) {
+    if (m[0][0] === "." && m[0][1] !== "." && ABBREVIATION.test(text.slice(start, m.index + 1))) continue;
+    out.push(text.slice(start, m.index + m[0].length).trim());
+    start = m.index + m[0].length;
+  }
+  out.push(text.slice(start).trim());
+  return out.filter(Boolean);
 }
 
-/** Sentences merged into chunks of at most `max` characters (a single long sentence stays whole). */
-function chunkText(text: string, max: number): string[] {
+/**
+ * Breaks a sentence longer than `max` at its last clause break (, ; : or a dash) within `max` chars.
+ * Without one it is only cut at a space, and only when longer than `hardMax`.
+ */
+function splitLong(sentence: string, max: number, hardMax = max): string[] {
   const out: string[] = [];
-  for (const s of splitSentences(text)) {
+  let rest = sentence;
+  while (rest.length > max) {
+    const head = rest.slice(0, max + 1);
+    const breaks = [...head.matchAll(/[,;:](?=\s)|\s[—–-](?=\s)/g)].map((m) => m.index + m[0].length);
+    const cut = breaks.filter((i) => i >= 20).at(-1) ?? (rest.length > hardMax ? head.lastIndexOf(" ") : -1);
+    if (cut <= 0) break;
+    out.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  out.push(rest);
+  return out.filter(Boolean);
+}
+
+/** Joins pieces into chunks of at most `max` characters; `firstMax` caps the first chunk. */
+function mergeChunks(pieces: string[], max: number, firstMax = max): string[] {
+  const out: string[] = [];
+  for (const s of pieces) {
     const last = out.at(-1);
-    if (last && last.length + 1 + s.length <= max) out[out.length - 1] = `${last} ${s}`;
+    const cap = out.length === 1 ? firstMax : max;
+    if (last && last.length + 1 + s.length <= cap) out[out.length - 1] = `${last} ${s}`;
     else out.push(s);
   }
+  return out;
+}
+
+/** Sentences merged into chunks of at most `max` characters. */
+function chunkText(text: string, max: number): string[] {
+  const out = mergeChunks(splitSentences(text).flatMap((s) => splitLong(s, max)), max);
   return out.length ? out : [text];
+}
+
+/** What a voice should read: no markdown symbols or emoji. Empty if nothing is speakable. */
+function speakable(text: string): string {
+  const t = text
+    .replace(/[*_#`~|<>]/g, " ")
+    .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return /[\p{L}\p{N}]/u.test(t) ? t : "";
+}
+
+// iOS Safari only lets an <audio> element play from script after it has played once during a tap, so
+// cloud voices reuse a few elements that are unlocked by the first tap or key press on the page.
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRnQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==";
+const idleAudio: HTMLAudioElement[] = [];
+let audioUnlocked = false;
+
+function takeAudio(): HTMLAudioElement {
+  return idleAudio.pop() ?? new Audio();
+}
+
+function returnAudio(a: HTMLAudioElement) {
+  a.onended = a.onerror = a.onloadedmetadata = null;
+  a.pause();
+  if (idleAudio.length < 3 && !idleAudio.includes(a)) idleAudio.push(a);
+}
+
+/** Call from a tap or key handler (e.g. Start Discussion) so cloud voices may play on iOS. */
+export function unlockAudio() {
+  if (audioUnlocked) return;
+  while (idleAudio.length < 2) idleAudio.push(new Audio());
+  for (const a of idleAudio) {
+    a.src = SILENT_WAV;
+    a.play().then(
+      () => {
+        audioUnlocked = true;
+        if (a.src === SILENT_WAV) a.pause();
+      },
+      () => {},
+    );
+  }
+}
+
+if (typeof window !== "undefined") {
+  const events = ["pointerdown", "pointerup", "touchend", "keydown", "click"] as const;
+  const onGesture = () => {
+    unlockAudio();
+    if (audioUnlocked) for (const e of events) window.removeEventListener(e, onGesture, true);
+  };
+  for (const e of events) window.addEventListener(e, onGesture, true);
 }
 
 async function cloudTtsAvailable(): Promise<boolean> {
@@ -93,18 +182,22 @@ async function cloudTtsAvailable(): Promise<boolean> {
 }
 
 const CLOUD_CACHE_MAX = 40; // chunks, not lines
-const CLOUD_MAX_FAILS = 3;
+const CLOUD_MAX_FAILS = 3; // failed lines in a row before switching to browser voices for a while
+const CLOUD_RETRY_MS = 60_000;
+const CLOUD_WAIT_MS = 7000; // a chunk not synthesized by then is said by the browser voice instead
+const CLOUD_LOAD_MS = 4000; // a fetched clip that hasn't loaded by then counts as broken
 
 export class VoiceBank {
   private specs = new Map<SpeakerId, VoiceSpec>();
   private silent: boolean;
   private silentWps: number;
   private language: Language;
-  // cloud (Gemini) voices
+  // cloud voices
   private cloud = false;
   private cloudFails = 0;
-  private cloudCache = new Map<string, Promise<Blob>>();
-  private playing = new Set<HTMLAudioElement>();
+  private cloudRetryAt = 0;
+  private cloudCache = new Map<string, Promise<Blob | null>>();
+  private active = new Set<SpeakHandle>();
   // Chrome can garbage-collect an utterance mid-speech and never fire "end"; hold a reference.
   private liveUtterance: SpeechSynthesisUtterance | null = null;
 
@@ -122,6 +215,7 @@ export class VoiceBank {
     speakers: SpeakerId[],
     opts: { silent?: boolean; silentWps?: number; language?: Language } = {},
   ): Promise<VoiceBank> {
+    if (!opts.silent) unlockAudio(); // still inside the Start click when called from it
     const [voices, cloud] = opts.silent ? [[], false] : await Promise.all([loadVoices(), cloudTtsAvailable()]);
     const bank = new VoiceBank(!!opts.silent || voices.length === 0, opts.silentWps ?? 2.6, opts.language ?? "english");
     bank.cloud = cloud;
@@ -130,16 +224,16 @@ export class VoiceBank {
   }
 
   private get cloudActive() {
-    return this.cloud && this.cloudFails < CLOUD_MAX_FAILS;
+    if (!this.cloud) return false;
+    if (this.cloudFails < CLOUD_MAX_FAILS) return true;
+    // After a run of failures, try the cloud again now and then; one more failure waits again.
+    if (Date.now() < this.cloudRetryAt) return false;
+    this.cloudFails = CLOUD_MAX_FAILS - 1;
+    return true;
   }
 
   get isSilent() {
     return this.silent && !this.cloudActive;
-  }
-
-  voiceName(speaker: SpeakerId): string | null {
-    if (this.cloudActive && speaker !== "you") return "Gemini voice";
-    return this.specs.get(speaker)?.voice?.name ?? null;
   }
 
   private assign(speakers: SpeakerId[], voices: SpeechSynthesisVoice[]) {
@@ -175,8 +269,11 @@ export class VoiceBank {
 
   /** Speaks `text` in the speaker's voice. `onProgress` receives the number of characters spoken so far. */
   speak(speaker: SpeakerId, text: string, onProgress?: (chars: number) => void): SpeakHandle {
-    if (this.cloudActive && speaker !== "you") return this.speakCloud(speaker, text, onProgress);
-    return this.speakBrowser(speaker, text, onProgress);
+    const handle =
+      this.cloudActive && speaker !== "you" ? this.speakCloud(speaker, text, onProgress) : this.speakBrowser(speaker, text, onProgress);
+    this.active.add(handle);
+    handle.done.then(() => this.active.delete(handle));
+    return handle;
   }
 
   private speakBrowser(speaker: SpeakerId, text: string, onProgress?: (chars: number) => void): SpeakHandle {
@@ -186,21 +283,26 @@ export class VoiceBank {
 
   /** Hint that `text` will be spoken soon by `speaker` (lets cloud voices synthesize ahead). No-op for browser voices. */
   preload(speaker: SpeakerId, text: string): void {
-    if (!this.cloudActive || speaker === "you" || !text.trim()) return;
+    if (!this.cloudActive || speaker === "you") return;
     for (const chunk of this.cloudChunks(text)) this.cloudAudio(speaker, chunk).catch(() => {});
   }
 
-  /** Stops anything playing (used on unmount). */
+  /** Stops everything this bank is saying (used on unmount). */
   cancelAll() {
-    this.playing.forEach((a) => a.pause());
-    this.playing.clear();
+    this.active.forEach((h) => h.stop());
+    this.active.clear();
     if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
   }
 
   // ---------- cloud voices ----------
 
-  /** Fetches (or reuses) the synthesized WAV for a line. Failed fetches are evicted so they can be retried. */
-  private cloudAudio(speaker: SpeakerId, text: string): Promise<Blob> {
+  /**
+   * Fetches (or reuses) the synthesized audio for a chunk; null when the chunk has nothing to say.
+   * Failed fetches are evicted so they can be retried.
+   */
+  private cloudAudio(speaker: SpeakerId, chunk: string): Promise<Blob | null> {
+    const text = speakable(chunk);
+    if (!text) return Promise.resolve(null);
     const key = `${speaker}|${text}`;
     const hit = this.cloudCache.get(key);
     if (hit) return hit;
@@ -223,40 +325,44 @@ export class VoiceBank {
   }
 
   /**
-   * Cloud voices synthesize a whole request before replying, so long lines are split into sentence-sized
-   * chunks that are fetched in parallel and played back to back: sound starts after the first chunk.
+   * Cloud voices synthesize a whole request before replying (~0.3 s + 12 ms per char), so lines are split
+   * into chunks that are fetched in parallel and played back to back. Sound starts after the first chunk
+   * (one short sentence), and each later chunk only has to be ready when the ones before it have played,
+   * so chunks grow: ~100 chars, then ~160.
    */
   private cloudChunks(text: string): string[] {
-    const sentences = splitSentences(text);
-    if (sentences.length <= 1) return [text];
-    // Keep the first chunk short so playback starts quickly; merge the rest into ~160-char pieces.
-    return [sentences[0], ...chunkText(sentences.slice(1).join(" "), 160)];
+    const [first, ...rest] = splitSentences(text);
+    if (!first) return [text];
+    return [...splitLong(first, 90, 160), ...mergeChunks(rest.flatMap((s) => splitLong(s, 160)), 160, 100)];
   }
 
   private speakCloud(speaker: SpeakerId, text: string, onProgress?: (chars: number) => void): SpeakHandle {
     const chunks = this.cloudChunks(text);
     const blobs = chunks.map((c) => this.cloudAudio(speaker, c)); // all requests start now
     blobs.forEach((b) => b.catch(() => {}));
-    let index = 0; // chunk being played
+    let index = 0; // chunk being played (or waited for)
+    let clip = -1; // chunk loaded into `audio`
     let offset = 0; // chars of text fully played (chunks before `index`, incl. joining spaces)
     let stopped = false;
     let settled = false;
-    let audio: HTMLAudioElement | null = null;
+    let audio: HTMLAudioElement | null = null; // one pooled element plays every chunk of the line
     let url: string | null = null;
     let inner: SpeakHandle | null = null;
+    let watchdog: ReturnType<typeof setTimeout> | null = null;
     let progressTimer: ReturnType<typeof setInterval> | null = null;
     let resolveFn!: (r: SpeakResult) => void;
     const done = new Promise<SpeakResult>((r) => (resolveFn = r));
 
+    const arm = (ms: number, fn: () => void) => {
+      if (watchdog) clearTimeout(watchdog);
+      watchdog = setTimeout(fn, ms);
+    };
     const release = () => {
+      if (watchdog) clearTimeout(watchdog);
       if (progressTimer) clearInterval(progressTimer);
+      watchdog = null;
       progressTimer = null;
-      if (audio) {
-        audio.onended = null;
-        audio.onerror = null;
-        audio.pause();
-        this.playing.delete(audio);
-      }
+      if (audio) returnAudio(audio);
       if (url) URL.revokeObjectURL(url);
       audio = null;
       url = null;
@@ -268,19 +374,19 @@ export class VoiceBank {
       resolveFn(r);
     };
     const charsAt = () => {
-      const chunk = chunks[index] ?? "";
-      if (!audio || !audio.duration || !isFinite(audio.duration)) return offset;
-      return Math.min(text.length, offset + Math.floor((audio.currentTime / audio.duration) * chunk.length));
+      if (!audio || clip !== index || !audio.duration || !isFinite(audio.duration)) return offset;
+      return Math.min(text.length, offset + Math.floor((audio.currentTime / audio.duration) * chunks[index].length));
     };
     const cutAtWord = (chars: number) => {
       if (chars >= text.length) return text;
       const cut = text.slice(0, chars);
       return cut.slice(0, Math.max(cut.lastIndexOf(" "), 0)).trim();
     };
-    // A chunk failed: say the rest of the line with the browser voice.
-    const fallback = () => {
-      if (stopped || settled) return;
-      this.cloudFails++;
+    // A chunk failed or is too slow: say the rest of the line with the browser voice. Blocked autoplay
+    // isn't the cloud's fault, so it doesn't count towards switching cloud voices off.
+    const fallback = (counts = true) => {
+      if (stopped || settled || inner) return;
+      if (counts && ++this.cloudFails >= CLOUD_MAX_FAILS) this.cloudRetryAt = Date.now() + CLOUD_RETRY_MS;
       release();
       const said = text.slice(0, offset).trim();
       const rest = chunks.slice(index).join(" ");
@@ -288,45 +394,42 @@ export class VoiceBank {
       inner = this.speakBrowser(speaker, rest, (c) => onProgress?.(offset + c));
       inner.done.then((r) => finish({ ...r, spokenText: `${said} ${r.spokenText}`.trim(), failed: r.failed || !browserCanSpeak }));
     };
+    const advance = (i: number) => {
+      if (stopped || settled || inner || index !== i) return;
+      offset += chunks[i].length + 1;
+      playChunk(i + 1);
+    };
 
     const playChunk = (i: number) => {
-      if (stopped || settled) return;
+      if (stopped || settled || inner) return;
       if (i >= chunks.length) {
         this.cloudFails = 0;
         onProgress?.(text.length);
         return finish({ spokenText: text, interrupted: false, failed: false });
       }
       index = i;
+      arm(CLOUD_WAIT_MS, () => fallback());
       blobs[i].then(
         (blob) => {
-          if (stopped || settled) return;
-          release();
+          if (stopped || settled || inner || index !== i) return;
+          if (!blob) return advance(i); // nothing speakable in this chunk
+          const a = (audio ??= takeAudio());
+          const prev = url;
           url = URL.createObjectURL(blob);
-          const a = new Audio(url);
-          audio = a;
-          this.playing.add(a);
-          let advanced = false;
-          const advance = () => {
-            if (advanced || stopped || settled) return;
-            advanced = true;
-            offset += chunks[i].length + 1;
-            playChunk(i + 1);
-          };
-          a.onended = advance;
-          // Watchdog: if "ended" never fires, move on after the clip's length (+ slack).
-          a.onloadedmetadata = () => {
-            const ms = (isFinite(a.duration) ? a.duration * 1000 : chunks[i].length * 90) + 3000;
-            setTimeout(() => {
-              if (audio === a) advance();
-            }, ms);
-          };
+          clip = i;
+          a.onended = () => advance(i);
           a.onerror = () => fallback();
-          progressTimer = setInterval(() => onProgress?.(charsAt()), 100);
+          // Watchdog: if "ended" never fires, move on after the clip's length (+ slack).
+          a.onloadedmetadata = () => arm((isFinite(a.duration) ? a.duration * 1000 : chunks[i].length * 90) + 3000, () => advance(i));
+          arm(CLOUD_LOAD_MS, () => fallback());
+          a.src = url;
+          if (prev) URL.revokeObjectURL(prev);
+          progressTimer ??= setInterval(() => onProgress?.(charsAt()), 100);
           a.play().then(
             () => {
               this.cloudFails = 0;
             },
-            () => fallback(),
+            (e: unknown) => fallback((e as Error)?.name !== "NotAllowedError"),
           );
         },
         () => fallback(),
@@ -338,13 +441,15 @@ export class VoiceBank {
       done,
       stop: () => {
         if (stopped || settled) return;
-        stopped = true;
         if (inner) {
+          stopped = true;
           inner.stop();
           return;
         }
         // Cut at the last whole word heard (nothing if the first chunk hadn't started yet).
-        finish({ spokenText: audio || offset ? cutAtWord(charsAt()) : "", interrupted: true, failed: false });
+        const spokenText = clip >= 0 || offset ? cutAtWord(charsAt()) : "";
+        stopped = true;
+        finish({ spokenText, interrupted: true, failed: false });
       },
     };
   }
@@ -417,7 +522,7 @@ export class VoiceBank {
       if (stopped) return;
       if (idx >= sentences.length) return finish({ spokenText: text, interrupted: false, failed: false });
       const s = sentences[idx];
-      const u = new SpeechSynthesisUtterance(s);
+      const u = new SpeechSynthesisUtterance(speakable(s) || s);
       u.voice = spec.voice;
       u.lang = spec.voice?.lang ?? "en-IN";
       u.rate = spec.rate;
