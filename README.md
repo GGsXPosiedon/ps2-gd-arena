@@ -4,6 +4,8 @@ Voice-first AI group discussion practice arena for Technical Hackathon Problem S
 
 **GD Arena**: practise a campus-placement group discussion (GD) out loud with 3–5 AI participants and an AI moderator, then get a report where every feedback point links to a quoted moment from your discussion.
 
+[Live demo](https://ps2-gd-arena.vercel.app/)
+
 ## Run it
 
 ```bash
